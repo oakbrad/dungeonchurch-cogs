@@ -2,7 +2,7 @@
 THE ORACLE for the THE QUIET YEAR
 https://buriedwithoutceremony.com/the-quiet-year
 
-All text in this file is by Alder Avery of Buried Ceremony
+All Oracle text in this file is by Alder Avery of Buried Ceremony
 
 Converted from:
 https://buriedwithoutceremony.com/wp-content/uploads/2019/08/The-Quiet-Year-Oracle.pdf
@@ -419,6 +419,7 @@ oracle = {
             ]
         }
     },
+
     "Clubs": {  # Autumn
         "A": {
             "prompt": "The community becomes obsessed with a single project. Which one? Why?",
