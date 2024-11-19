@@ -4,6 +4,7 @@ from redbot.core import commands, Config, checks, app_commands
 from redbot.core.utils.chat_formatting import error, question, success
 from .oracle import oracle
 from .game import GameInitView, GameStateView
+import pydealer
 
 class TheQuietYear(commands.Cog):
     __author__ = "DM Brad"
@@ -50,7 +51,7 @@ class TheQuietYear(commands.Cog):
                 "taken": [],                # Players (ID) who have taken their turn
                 "remaining": []               # Players who still need to take their turn
             },
-            "deck": {}                      # pydealer Deck shuffled according to rules?
+            "deck": None                      # pydealer Deck shuffled by create_deck()
         }
 
         # Create embeds
@@ -175,6 +176,21 @@ class TheQuietYear(commands.Cog):
     #
     # GAME FUNCTIONS
     #
+    def create_deck(self) -> pydealer.Deck:
+        """Return a Deck sorted by seasons"""
+        season_rank = {
+            "suits": {
+                "Spades": 1, # Winter
+                "Clubs": 2, # Autumn
+                "Diamonds": 3, # Summer
+                "Hearts": 4 # Spring
+            }
+        }
+        deck = pydealer.Deck()
+        deck.shuffle()
+        deck.sort(season_rank)
+        return deck
+
     async def end_game(self, channel_id: int, interaction: discord.Interaction = None, reason: str = None) -> None:
         """Ends the game in the specified channel or responds to an interaction."""
         # Check if the game exists

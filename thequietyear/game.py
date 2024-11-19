@@ -88,6 +88,9 @@ class GameInitView(ui.View):
 
         # Transition to the turn handler (placeholder)
         await interaction.response.send_message(success("The game has started!"), ephemeral=False)
+        # Create the deck
+        game_state["deck"] = self.cog.create_deck()
+        # Start the turn loop
         await self.cog.start_turn_handler(interaction.channel_id)
 
     @ui.button(label="Cancel", style=discord.ButtonStyle.danger,emoji="✖️")
