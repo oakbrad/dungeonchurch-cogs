@@ -1,3 +1,8 @@
+"""
+This button mixin is shared by all views (GameStateView, GameInitView, CardView)
+
+The buttons call game actions or interactive elements (modals/selects)
+"""
 import discord
 from redbot.core.utils.chat_formatting import error, question, success
 
@@ -14,11 +19,11 @@ class ButtonMixin:
             player = interaction.user
 
             if player.id not in game_state["players"]:
-                await interaction.response.send_message(error("`You must join the game first!`", ephemeral=True))
+                await interaction.response.send_message(error("`You must join the game first!`"), ephemeral=True)
                 return
 
             # Trigger the Abundance modal
-            from .game_modals import AddAbundanceModal
+            from .modals import AddAbundanceModal
             modal = AddAbundanceModal(self.cog, interaction.channel_id)
             await interaction.response.send_modal(modal)
             
@@ -35,11 +40,11 @@ class ButtonMixin:
             player = interaction.user
 
             if player.id not in game_state["players"]:
-                await interaction.response.send_message(error("You must join the game first!"), ephemeral=True)
+                await interaction.response.send_message(error("`You must join the game first!`"), ephemeral=True)
                 return
             
             # Trigger the Abundance modal
-            from .game_modals import AddScarcityModal
+            from .modals import AddScarcityModal
             modal = AddScarcityModal(self.cog, interaction.channel_id)
             await interaction.response.send_modal(modal)
             
@@ -66,7 +71,7 @@ class ButtonMixin:
                 return
 
             # Show the RemoveScarcityView
-            from .game_views import RemoveScarcityView
+            from .views import RemoveScarcityView
             remove_view = RemoveScarcityView(self.cog, interaction.channel_id)
             await interaction.response.send_message("Choose an Scarcity to remove:", view=remove_view, ephemeral=True)
             
@@ -93,7 +98,7 @@ class ButtonMixin:
                 return
 
             # Show the RemoveAbundanceView
-            from .game_views import RemoveAbundanceView
+            from .views import RemoveAbundanceView
             remove_view = RemoveAbundanceView(self.cog, interaction.channel_id)
             await interaction.response.send_message("Choose an abundance to remove:", view=remove_view, ephemeral=True)
             

@@ -3,8 +3,8 @@ from discord import Embed
 from redbot.core import commands, Config, checks, app_commands
 from redbot.core.utils.chat_formatting import error, question, success
 from .oracle import oracle
-from .game_views import GameInitView, GameStateView
-from .game_embeds import game_state_embed
+from .ui.views import GameInitView, GameStateView
+from .ui.embeds import game_state_embed
 import pydealer
 
 from pprint import pformat

@@ -1,8 +1,8 @@
 import discord
 from discord import ui
 from redbot.core.utils.chat_formatting import error, question, success
-from .game_buttons import ButtonMixin
-from .game_embeds import update_state_embed
+from .buttons import ButtonMixin
+from .embeds import update_state_embed
 
 class GameInitView(ui.View):
     """The initial message for the game with controls for leave/joining."""
@@ -70,8 +70,6 @@ class GameInitView(ui.View):
             # Remove the player from turn tracker
             if player.id in game_state["current_turn"]:
                 game_state["current_turn"].remove(player.id)
-            if player.id in game_state["current_turn"]:
-                game_state["current_turn"].remove(player.id)
 
             await interaction.response.send_message(error(f"{player.mention} left the game."), ephemeral=False)
 
@@ -79,6 +77,8 @@ class GameInitView(ui.View):
             player_role = await self.cog.config.guild(interaction.guild).player_role()
             if player_role:
                 await player.remove_roles(interaction.guild.get_role(player_role))
+
+            await update_state_embed(self.cog, interaction.channel, game_state)
 
         else:
             await interaction.response.send_message(error(f"`You can't leave if you didn't join.`"), ephemeral=True)
@@ -125,12 +125,12 @@ class GameStateView(ui.View, ButtonMixin):
 class RemoveAbundanceView(discord.ui.View):
     def __init__(self, cog, interaction_channel_id):
         super().__init__()
-        from .game_modals import RemoveAbundanceSelect
+        from .modals import RemoveAbundanceSelect
         self.add_item(RemoveAbundanceSelect(cog, interaction_channel_id))
 
 
 class RemoveScarcityView(discord.ui.View):
     def __init__(self, cog, interaction_channel_id):
         super().__init__()
-        from .game_modals import RemoveScarcitySelect
+        from .modals import RemoveScarcitySelect
         self.add_item(RemoveScarcitySelect(cog, interaction_channel_id))

@@ -1,6 +1,6 @@
 import discord
 from redbot.core.utils.chat_formatting import error, question, success
-from .game_embeds import update_state_embed
+from .embeds import update_state_embed
 
 class AddAbundanceModal(discord.ui.Modal, title="Add Abundance"):
     def __init__(self, cog, interaction_channel_id):
