@@ -75,7 +75,7 @@ class TheQuietYear(commands.Cog):
         remaining_minutes = round_timeout % 60
         human_readable = (f"{hours}h " if hours > 0 else "") + (f"{remaining_minutes}m" if remaining_minutes > 0 else "")
 
-        init_embed.set_footer(text=f"👥 1{' - '+str(max_players)+' Players' if max_players > 1 else ''} ⏳ Round Time Limit: {human_readable}")
+        init_embed.set_footer(text=f"👥 For 1{' - '+str(max_players)+' Players' if max_players > 1 else ''} | ⏳ Round Time Limit: {human_readable}")
         state_embed = game_state_embed(self, self.game_state[interaction.channel.id])
 
         # Create the View
@@ -95,7 +95,7 @@ class TheQuietYear(commands.Cog):
         channel_pins = await interaction.channel.pins()
         if len(channel_pins) >= 50:
             await channel_pins[-1].unpin()
-        #await state_message.pin()
+        await state_message.pin()
 
 
     @app_commands.command()
