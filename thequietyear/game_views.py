@@ -1,10 +1,13 @@
 import discord
-from discord import Embed, ui
+from discord import ui
 from redbot.core.utils.chat_formatting import error, question, success
+from .game_buttons import ButtonMixin
+from .game_embeds import update_state_embed
 
 class GameInitView(ui.View):
-    def __init__(self, cog):
-        super().__init__()
+    """The initial message for the game with controls for leave/joining."""
+    def __init__(self, cog, game_state):
+        super().__init__(timeout=game_state["round_timeout"])
         self.cog = cog
 
         # Add the link button at the end
@@ -21,7 +24,7 @@ class GameInitView(ui.View):
         game_state = self.cog.game_state[interaction.channel_id]
         player = interaction.user
 
-        if player.id in [p.id for p in game_state["players"]]:
+        if player.id in game_state["players"]:
             await interaction.response.send_message(error("`You're already in the player list!`"), ephemeral=True)
             return
         
@@ -34,7 +37,8 @@ class GameInitView(ui.View):
         # add player to game
         game_state["players"].append(player.id)
         # add player to current round
-        game_state["turn_tracker"]["remaining"].append(player.id)
+        game_state["current_turn"].append(player.id)
+
         # assign role if in settings
         player_role = await self.cog.config.guild(interaction.guild).player_role()
         if player_role:
@@ -48,6 +52,9 @@ class GameInitView(ui.View):
             "\n### Once everyone has done so, we will start the first week.", ephemeral=True
         )
         await interaction.channel.send(success(f"{player.mention} joined the game!"))
+
+        # Update game state tracker
+        await update_state_embed(self.cog, interaction.channel, game_state)
             
 
     @ui.button(label="Leave", style=discord.ButtonStyle.secondary, emoji="🚷")
@@ -61,10 +68,10 @@ class GameInitView(ui.View):
             game_state["players"].remove(player.id)
 
             # Remove the player from turn tracker
-            if player.id in game_state["turn_tracker"]["remaining"]:
-                game_state["turn_tracker"]["remaining"].remove(player.id)
-            if player.id in game_state["turn_tracker"]["taken"]:
-                game_state["turn_tracker"]["taken"].remove(player.id)
+            if player.id in game_state["current_turn"]:
+                game_state["current_turn"].remove(player.id)
+            if player.id in game_state["current_turn"]:
+                game_state["current_turn"].remove(player.id)
 
             await interaction.response.send_message(error(f"{player.mention} left the game."), ephemeral=False)
 
@@ -104,37 +111,26 @@ class GameInitView(ui.View):
         reason = f"The game was cancelled by {interaction.user.mention}."
         await self.cog.end_game(interaction.channel_id, interaction, reason)
 
-class GameStateView(ui.View):
+class GameStateView(ui.View, ButtonMixin):
     def __init__(self, cog):
-        super().__init__()
+        super().__init__(timeout=None)
         self.cog = cog
 
-    @ui.button(label="Add Abundance", style=discord.ButtonStyle.secondary)
-    async def add_abundance(self, interaction: discord.Interaction, button: ui.Button):
-        """Add an Abundance to the game state."""
-        game_state = self.cog.game_state[interaction.channel_id]
-        player = interaction.user
+        # Add buttons using mixin methods
+        self.add_item(self.add_abundance_button(self, custom_id="add_abundance_tracker"))
+        self.add_item(self.remove_abundance_button(self, custom_id="remove_abundance_tracker"))
+        self.add_item(self.add_scarcity_button(self, custom_id="add_scarcity_tracker"))
+        self.add_item(self.remove_scarcity_button(self, custom_id="remove_scarcity_tracker"))
 
-        if player.id not in game_state["players"]:
-            await interaction.response.send_message("You must join the game first!", ephemeral=True)
-            return
+class RemoveAbundanceView(discord.ui.View):
+    def __init__(self, cog, interaction_channel_id):
+        super().__init__()
+        from .game_modals import RemoveAbundanceSelect
+        self.add_item(RemoveAbundanceSelect(cog, interaction_channel_id))
 
-        # Ask for Abundance input (placeholder for future modal implementation)
-        abundance = "Example Abundance"  # Replace with input modal later
-        game_state["abundances"].append(abundance)
-        await interaction.response.send_message(f"Added Abundance: {abundance}", ephemeral=False)
 
-    @ui.button(label="Add Scarcity", style=discord.ButtonStyle.secondary)
-    async def add_scarcity(self, interaction: discord.Interaction, button: ui.Button):
-        """Add a Scarcity to the game state."""
-        game_state = self.cog.game_state[interaction.channel_id]
-        player = interaction.user
-
-        if player.id not in game_state["players"]:
-            await interaction.response.send_message(error("`You must join the game first!`"), ephemeral=True)
-            return
-
-        # Ask for Scarcity input (placeholder for future modal implementation)
-        scarcity = "Example Scarcity"  # Replace with input modal later
-        game_state["scarcities"].append(scarcity)
-        await interaction.response.send_message(f"Added Scarcity: {scarcity}", ephemeral=False)
+class RemoveScarcityView(discord.ui.View):
+    def __init__(self, cog, interaction_channel_id):
+        super().__init__()
+        from .game_modals import RemoveScarcitySelect
+        self.add_item(RemoveScarcitySelect(cog, interaction_channel_id))
