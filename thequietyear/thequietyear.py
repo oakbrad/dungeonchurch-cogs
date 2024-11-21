@@ -42,7 +42,7 @@ class TheQuietYear(commands.Cog):
         
         # Retrieve Game Settings
         max_players = int(await self.config.guild(interaction.guild).max_players())
-        round_timeout = int(await self.config.guild(interaction.guild).turn_timeout())
+        round_timeout = int(await self.config.guild(interaction.guild).round_timeout())
 
         # Initialize the game state
         self.active_games[interaction.channel.id] = True
@@ -79,7 +79,7 @@ class TheQuietYear(commands.Cog):
         state_embed = game_state_embed(self, self.game_state[interaction.channel.id])
 
         # Create the View
-        init_view = GameInitView(self, self.game_state[interaction.channel.id])
+        init_view = GameInitView(self, self.game_state[interaction.channel.id], interaction.channel.id)
         state_view = GameStateView(self)
 
         # Send game initialization message, store ID in game_state
@@ -206,6 +206,9 @@ class TheQuietYear(commands.Cog):
                 await interaction.response.defer()
             except discord.InteractionResponded:
                 pass  # Interaction already responded to
+        # Retrieve the channel and guild
+        channel = self.bot.get_channel(channel_id)
+        guild = channel.guild if channel else None
 
         # Check if the game exists
         if channel_id not in self.active_games:
@@ -214,7 +217,6 @@ class TheQuietYear(commands.Cog):
             return  # No game to end
 
         # Fetch the original game initialization message
-        channel = self.bot.get_channel(channel_id)
         if not channel:
             if interaction:
                 await interaction.followup.send(error("`Unable to access the channel.`"), ephemeral=True)
@@ -223,12 +225,12 @@ class TheQuietYear(commands.Cog):
         game_state = self.game_state.get(channel_id, {})
 
         # remove role from all players if in settings
-        player_role = await self.config.guild(interaction.guild).player_role()
+        player_role = await self.config.guild(guild).player_role()
         if player_role:
-            role = interaction.guild.get_role(player_role)
+            role = guild.get_role(player_role)
             if role:
                 for player in game_state.get("players",[]):
-                    member = interaction.guild.get_member(player)
+                    member = guild.get_member(player)
                     if member and role in member.roles:
                         try:
                             await member.remove_roles(role)

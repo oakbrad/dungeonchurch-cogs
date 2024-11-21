@@ -6,9 +6,10 @@ from .embeds import update_state_embed
 
 class GameInitView(ui.View):
     """The initial message for the game with controls for leave/joining."""
-    def __init__(self, cog, game_state):
-        super().__init__(timeout=game_state["round_timeout"])
+    def __init__(self, cog, game_state, channel_id):
+        super().__init__(timeout=game_state["round_timeout"] * 60)
         self.cog = cog
+        self.channel_id = channel_id
 
         # Add the link button at the end
         self.add_item(discord.ui.Button(
@@ -17,6 +18,13 @@ class GameInitView(ui.View):
             emoji="📚",
             url="https://store.buriedwithoutceremony.com/collections/frontpage/products/the-quiet-year-pdf"
         ))
+
+    async def on_timeout(self):
+        """End the game on timeout if game hasn't been started."""
+        game_state = self.cog.game_state.get(self.channel_id)
+        if game_state and game_state.get("week", 0) == 0:
+            reason = "The round timed out before the game was started."
+            await self.cog.end_game(self.channel_id, reason=reason)
 
     @ui.button(label="Join", style=discord.ButtonStyle.primary, emoji="✅")
     async def join(self, interaction: discord.Interaction, button: ui.Button):
