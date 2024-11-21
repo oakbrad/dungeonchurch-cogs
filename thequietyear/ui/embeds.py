@@ -2,6 +2,7 @@
 Functions for creating embeds
 """
 import discord
+from ..oracle import *
 
 async def game_init_embed(cog, channel) -> discord.Embed:
     """Construct the initial game info embed."""
@@ -67,6 +68,58 @@ async def update_state_embed(cog, channel, game_state) -> None:
         # Message no longer exists
         pass
 
-def card_embed(self, game_state, card) -> discord.Embed:
+def game_card_embed(self, card, game_state = None) -> discord.Embed:
     """Create the embed for a card."""
-    return
+    value = card.value
+    suit = card.suit
+    try:
+        int(value)
+        value_abbr = value
+    except ValueError:
+        value_abbr = value[0]
+
+    # Get card data from The Oracle
+    card_data = oracle.get(suit, {}).get(value_abbr, {})
+    options = card_data.get("options", [])
+    prompt = card_data.get("prompt", None)
+
+    # Define game_state color based on suit
+    suit_colors = {
+        "Spades": 0x0a1172,
+        "Clubs": 0xcc5801, 
+        "Diamonds": 0xfcae1e,
+        "Hearts": 0x74b72e
+    }
+    color = suit_colors.get(suit, 0xffffff)
+    if game_state is not None:
+        game_state["color"] = color
+
+    # Create the embed
+    embed = discord.Embed(
+            title=f":{suit.lower()}: {value} of {suit}",
+            description=f"> *{prompt}*" if prompt != None else '',
+            color=color
+        )
+    
+    # Add options with mechanics
+    for i, option in enumerate(options, start=1):
+        option_text = f"```{option['text']}```"
+        mechanics_text = ""
+
+        # Append mechanics if they exist
+        if option.get("mechanics"):
+            mechanics_effects = [mech["effect"] for mech in option["mechanics"]]
+            mechanics_text = "\n".join([f"* {effect}" for effect in mechanics_effects])
+        
+        # Combine option text with mechanics
+        if len(options) == 1:
+            name = ""
+        else:
+            name = f"Option :number_{i}:"
+        embed.add_field(
+            name=name,
+            value=f"{option_text}\n**{mechanics_text}**" if mechanics_text else option_text,
+            inline=True
+        )
+
+    return embed

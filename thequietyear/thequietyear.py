@@ -3,8 +3,8 @@ from discord import Embed
 from redbot.core import commands, Config, checks, app_commands
 from redbot.core.utils.chat_formatting import error, question, success
 from .oracle import oracle
-from .ui.views import GameInitView, GameStateView
-from .ui.embeds import game_state_embed
+from .ui.views import GameInitView, GameStateView, CardView
+from .ui.embeds import game_state_embed,game_card_embed
 import pydealer
 
 from pprint import pformat
@@ -49,6 +49,7 @@ class TheQuietYear(commands.Cog):
         self.game_state[interaction.channel.id] = {
             "game_init_message": None,      # Message ID [int] of GameInitView
             "game_state_message": None,     # Message ID [int] of GameStateView
+            "color": 0xff000,               # Embed color [hex]
             "max_players": max_players,     # Max players from settings [int]
             "players": [],                  # list of user IDs [int]
             "scarcities": [],               # list of Scarcities [str]
@@ -179,6 +180,17 @@ class TheQuietYear(commands.Cog):
     async def gamestate(self, ctx: commands.Context) -> None:
         """Dump the game state for debugging."""
         await ctx.send(question(f"{pformat(self.game_state)}"))
+
+    @thequietyear.command()
+    async def card(self, ctx: commands.Context) -> None:
+        """Return a random card for testing."""
+        deck = self.create_deck()
+        deck.shuffle() # DEBUGGING
+        card = deck.deal(1)[0]
+        view = CardView(self, card)
+        embed = game_card_embed(self, card)
+        await ctx.send(view=view, embed=embed)
+
 
     #
     # GAME FUNCTIONS

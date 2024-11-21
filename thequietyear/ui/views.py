@@ -2,7 +2,7 @@ import discord
 from discord import ui
 from redbot.core.utils.chat_formatting import error, question, success
 from .buttons import ButtonMixin
-from .embeds import update_state_embed
+from .embeds import update_state_embed, game_card_embed
 
 class GameInitView(ui.View):
     """The initial message for the game with controls for leave/joining."""
@@ -129,6 +129,13 @@ class GameStateView(ui.View, ButtonMixin):
         self.add_item(self.remove_abundance_button(self, custom_id="remove_abundance_tracker"))
         self.add_item(self.add_scarcity_button(self, custom_id="add_scarcity_tracker"))
         self.add_item(self.remove_scarcity_button(self, custom_id="remove_scarcity_tracker"))
+
+class CardView(ui.View, ButtonMixin):
+    def __init__(self, cog, card):
+        super().__init__(timeout=None)
+        self.cog = cog
+        self.card = card # pydealer.Card object
+        
 
 class RemoveAbundanceView(discord.ui.View):
     def __init__(self, cog, interaction_channel_id):
