@@ -28,20 +28,39 @@ class ContestedRollModal(Modal):
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
+            # Check if this is a coin flip (1d2) or a regular roll (1d20)
+            is_coin_flip = self.initial_result <= 2
+            
             mod_input = self.children[0].value
             modifier = int(mod_input) if mod_input else 0 # default to 0 if left blank in modal
             challenger_modifier = self.total - self.initial_result
-            # Parse and roll for the challenged user
-            challenged_result = self.dice_roller.parse("1d20").result
-            challenged_total = challenged_result + modifier
             
-            # Update the message with both results
-            new_content = (
-                f"### {self.challenger.mention} vs {interaction.user.mention}!\n\n"
-                f"> ✅ **{self.challenger.display_name}** rolled **1d20{f'+{challenger_modifier}' if challenger_modifier != 0 else ''}** and got `{self.total}`\n"
-                f"> ❌ **{interaction.user.display_name}** rolled **1d20{f'+{modifier}' if modifier != 0 else ''}** and got `{challenged_total}`\n"
-                f"## {'🤝 Draw!' if self.total == challenged_total else (f'👑 {self.challenger.display_name} Won!' if self.total > challenged_total else f'👑 {self.challenged.display_name} Won!')}"
-            )
+            # Parse and roll for the challenged user
+            if is_coin_flip:
+                challenged_result = self.dice_roller.parse("1d2").result
+                challenged_coin = "heads" if challenged_result == 1 else "tails"
+                challenger_coin = "heads" if self.initial_result == 1 else "tails"
+                
+                # Update the message with both results for coin flip
+                new_content = (
+                    f"### {self.challenger.mention} vs {interaction.user.mention}!\n\n"
+                    f"> 🪙 **{self.challenger.display_name}** flipped a coin and got `{challenger_coin}`\n"
+                    f"> 🪙 **{interaction.user.display_name}** flipped a coin and got `{challenged_coin}`\n\n"
+                    f"## {'🤝 Draw!' if challenger_coin == challenged_coin else f'👑 {self.challenger.display_name} Won!' if challenger_coin == 'heads' and challenged_coin == 'tails' else f'👑 {interaction.user.display_name} Won!'}"
+                )
+            else:
+                # Regular d20 roll logic
+                challenged_result = self.dice_roller.parse("1d20").result
+                challenged_total = challenged_result + modifier
+                
+                # Update the message with both results for d20 roll
+                new_content = (
+                    f"### {self.challenger.mention} vs {interaction.user.mention}!\n\n"
+                    f"> ✅ **{self.challenger.display_name}** rolled **1d20{f'+{challenger_modifier}' if challenger_modifier != 0 else ''}** and got `{self.total}`\n"
+                    f"> ❌ **{interaction.user.display_name}** rolled **1d20{f'+{modifier}' if modifier != 0 else ''}** and got `{challenged_total}`\n\n"
+                    f"## {'🤝 Draw!' if self.total == challenged_total else (f'👑 {self.challenger.display_name} Won!' if self.total > challenged_total else f'👑 {self.challenged.display_name} Won!')}"
+                )
+                
             if self.view:
                 self.view.stop() # Stop the view so that it's not edited on_timeout
             await self.message.edit(content=new_content, view=None)  # Remove the button
@@ -52,7 +71,11 @@ class ContestedRollModal(Modal):
 
 class ContestedRollButton(Button):
     def __init__(self, challenger, challenged, ctx, dice_roller, initial_result, total):
-        super().__init__(label=f"{challenged.display_name}'s Roll!", style=discord.ButtonStyle.primary)
+        # Check if this is a coin flip (1d2) or a regular roll (1d20)
+        is_coin_flip = initial_result <= 2
+        button_label = f"{challenged.display_name}'s Coin Flip!" if is_coin_flip else f"{challenged.display_name}'s Roll!"
+        
+        super().__init__(label=button_label, style=discord.ButtonStyle.primary)
         self.challenger = challenger
         self.challenged = challenged
         self.ctx = ctx
@@ -85,6 +108,8 @@ class ContestedRollView(View):
         self.message = None
         self.challenged = challenged
         self.challenger = challenger
+        self.initial_result = initial_result
+        self.is_coin_flip = initial_result <= 2
         self.add_item(ContestedRollButton(challenger, challenged, ctx, dice_roller, initial_result, total))
 
     def set_message(self, message):
@@ -94,9 +119,10 @@ class ContestedRollView(View):
         """Timeout the view."""
         if self.message:
             try:
+                challenge_type = "coin flip" if self.is_coin_flip else "challenge"
                 await self.message.edit(
-                    content=f"> 😞 *{self.challenged.mention} did not respond to {self.challenger.mention}'s challenge.*",
+                    content=f"> 😞 *{self.challenged.mention} did not respond to {self.challenger.mention}'s {challenge_type}.*",
                     view = None
                 )
             except:
-                pass # Message was not found / deleted            
+                pass # Message was not found / deleted

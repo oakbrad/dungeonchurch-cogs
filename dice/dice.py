@@ -251,8 +251,11 @@ class Dice(commands.Cog):
         view.set_message(sent_message)  # Link the view to the message
 
     @commands.hybrid_command()
-    async def flipcoin(self, ctx: commands.Context) -> None:
-        """Flip coin, heads or tails """
+    async def flipcoin(self, ctx: commands.Context, challenge: discord.Member = None) -> None:
+        """Flip a coin, get heads or tails
+        
+        You can specify a target, who can then flip their own coin to determine the winner.
+        """
         dice_roller = pyhedrals.DiceRoller(
                 maxDice=await self.config.max_dice_rolls(),
                 maxSides=await self.config.max_die_sides(),
@@ -262,11 +265,38 @@ class Dice(commands.Cog):
             coin = "heads"
         else:
             coin = "tails"
-        roll_message = f"{emojis['d2']} {ctx.message.author.mention} flipped a coin and got `{coin}`"
-        await ctx.send(roll_message)
-       # Clean up prefix messages according to setting
+            
+        # Handle single flip
+        if not challenge:
+            roll_message = f"{emojis['d2']} {ctx.message.author.mention} flipped a coin and got `{coin}`"
+            await ctx.send(roll_message)
+            # Clean up prefix messages according to setting
+            if not ctx.interaction and await self.config.message_cleanup():
+                await ctx.message.delete() 
+            return
+            
+        # Handle contested flip
+        timeout = await self.config.timeout()
+        if challenge.bot:
+            await ctx.send("`You can't challenge a bot!`", ephemeral=True)
+            return
+        if ctx.author.id == challenge.id:
+            await ctx.send("`You can't challenge yourself, silly!`", ephemeral=True)
+            return
+            
+        roll_message = (
+            f"### :coin: {ctx.author.mention} has challenged {challenge.mention} to a **coin flip**!\n\n"
+            f"> 🎲 **{ctx.author.display_name}** flipped a coin and got `{coin}`\n\n"
+            f"*{challenge.display_name}, click the button below to flip your coin!*"
+        )
+        
+        view = contested.ContestedRollView(ctx.author, challenge, ctx, dice_roller, result, result, timeout)
+        message = await ctx.send(roll_message, view=view)
+        view.set_message(message)
+        
+        # Clean up prefix messages according to setting
         if not ctx.interaction and await self.config.message_cleanup():
-            await ctx.message.delete() 
+            await ctx.message.delete()
 
     @commands.hybrid_command()
     async def eightball(self, ctx: commands.Context) -> None:
