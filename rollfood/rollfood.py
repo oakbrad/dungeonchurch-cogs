@@ -221,3 +221,17 @@ class RollFood(commands.Cog):
         view = RollFoodView(cog=self, sheet_id=sheet_id, api_key=sheets_key, link=link, openai_key=openai_key, prompt=prompt)
         message = await ctx.send(content, view=view)
         view.set_message(message)
+
+    @commands.hybrid_command()
+    async def addfood(self, ctx: commands.Context):
+        """Get a link to add restaurants to the list."""
+        sheet_id = await self.config.guild(ctx.guild).sheet_id()
+
+        if not sheet_id:
+            await ctx.send("❌ Spreadsheet not configured.", ephemeral=True)
+            return
+
+        sheet_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit"
+        view = View()
+        view.add_item(Button(label="Edit Spreadsheet", style=discord.ButtonStyle.link, url=sheet_url))
+        await ctx.send("You can edit the restaurant list here:", view=view, ephemeral=True)
