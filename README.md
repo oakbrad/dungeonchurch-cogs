@@ -74,6 +74,33 @@ Make a list of status activities, then cycle through them randomly or sequential
 * `/randomstatus` to change settings
 
 ## rollfood
-Rolls a random restaurant from [a Google Sheet](https://docs.google.com/spreadsheets/d/16FEWdSCU3c3L2XJhLEIrQLQn7eEdzNghkN44Weg2LOg/) and provides a link. Requires [Google Sheets API](https://console.cloud.google.com/flows/enableapi?apiid=sheets.googleapis.com) key.
+Rolls a random restaurant from a Google Sheet and provides a link to order. The sheet should have two columns: the restaurant name, and the URL for ordering. Requires [Google Sheets API](https://console.cloud.google.com/flows/enableapi?apiid=sheets.googleapis.com) key.
 * `/rollfood` rolls for food
+* `/addfood` links to the spreadsheet
 * `[p]foodconfig sheet` to set the Sheet ID
+* `[p]foodconfig prompt` set an optional prompt for your bot
+
+# Local Development
+To work on cogs locally, run the bot in a container:
+```yaml
+services:
+  redbotdev:
+    container_name: redbotdev
+    image: phasecorex/red-discordbot
+    restart: unless-stopped
+    volumes:
+      - /tmp/redbotdev:/data
+      - /path/to/local/dungeonchurch-cogs:/devcogs
+    environment:
+      - TOKEN=
+      - PREFIX=!
+      - TZ=America/Los_Angeles
+      - PUID=1000
+      - OWNER=
+```
+Add the path and downloader. Locally installed cogs need their dependencies installed manually.
+```
+[p]addpath /devcogs
+[p]load downloader
+[p]pipinstall <dependency>
+```
