@@ -40,6 +40,7 @@ For cogs that need API keys, set them globally in Red's shared API storage:
 ```
 [p]set api openai api_key,<paste here>
 [p]set api googlesheets api_key,<paste here>
+[p]set api ghost key_id,<id> key_secret,<secret>
 ```
 
 # Cogs
@@ -63,6 +64,23 @@ Forked from [PCXCogs](https://github.com/PhasecoreX/PCXCogs). I added better for
 * `/flipcoin` flip a coin, get heads or tails
 * `/eightball` ask the Magic 8 Ball
 * `[p]diceset` to change settings
+
+## ghostsync
+Manage linking [Ghost](https://ghost.org) members to Discord accounts and sync subscription status to a Discord role. Discord IDs are stored in the Ghost member private Note. Requires setting a Ghost Integration Admin API key & secret.
+
+* `[p]ghostsync url` base API URL
+* `[p]ghostsync interval` how often to sync in seconds
+* `[p]ghostsync logchannel` report API failures to this channel
+* `[p]ghostsync role` role added/removed based on Ghost subscription
+* `[p]ghostsync rolesync` sync a secondary role (ex: Server Boosters) to the primary role
+* `[p]ghostsync link <email> <@mention>` link a member email to a Discord user (stores ID in Member Note)
+* `[p]ghostsync unlink <email OR @mention>` unlink a user (removes ID from Member Note)
+* `[p]ghostsync list` list all linked members
+* `[p]ghostsync subscribers` list subscribers, their Discord name, and subscription tier name
+* `[p]ghostsync orphans` list Ghost members who are not linked to Discord IDs
+* `[p]ghostsync sync` force a sync
+
+
 ## q3stat
 Quake III Arena [server](https://quake.dungeon.church) notifications with [qstat](https://github.com/Unity-Technologies/qstat). Run qstat via crontab on your server to output JSON to a publicly accessible file:
 ```

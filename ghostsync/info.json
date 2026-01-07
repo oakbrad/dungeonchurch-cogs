@@ -1,0 +1,12 @@
+{
+    "name": "GhostSync",
+    "author": ["DM Brad"],
+    "short": "Manage linking Ghost members to Discord accounts and sync subscription status to a Discord role. ",
+    "description": "Automatically assigns Discord roles based on Ghost blog subscription status. Uses Ghost Admin API to check member subscriptions and syncs roles at configurable intervals.",
+    "install_msg": "Set your Ghost API keys with [p]set api ghost key_id,<id> key_secret,<secret> then configure with [p]ghostsync url and [p]ghostsync role.",
+    "requirements": ["aiohttp", "PyJWT"],
+    "tags": ["ghost", "subscriber", "roles", "sync", "membership", "community", "patreon", "patron"],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [3, 11, 0],
+    "end_user_data_statement": "This cog stores Discord user IDs in Ghost member notes to link accounts. No other user data is stored by the cog itself."
+}
