@@ -90,7 +90,12 @@ class PaginatedListView(View):
         self.page = 0
         self.max_page = (len(items) - 1) // per_page
         self.message = None
-        self._update_buttons()
+
+        # Remove buttons if only one page
+        if self.max_page == 0:
+            self.clear_items()
+        else:
+            self._update_buttons()
 
     def _update_buttons(self):
         self.prev_button.disabled = self.page == 0
@@ -766,6 +771,13 @@ class GhostSync(commands.Cog):
             await ctx.send(error("`Failed to fetch Ghost members. Check API keys.`"))
             return
 
+        # Get sync role if configured
+        sync_role_id = await self.config.guild(ctx.guild).sync_role()
+        sync_role = ctx.guild.get_role(sync_role_id) if sync_role_id else None
+
+        # Build set of Ghost subscriber Discord IDs for exclusion from sync role list
+        ghost_subscriber_ids = set()
+
         subscribers = []
         for ghost_member in members:
             discord_id = self._extract_discord_id(ghost_member.get("note"))
@@ -775,6 +787,8 @@ class GhostSync(commands.Cog):
             subscriptions = ghost_member.get("subscriptions", [])
             if not subscriptions:
                 continue
+
+            ghost_subscriber_ids.add(discord_id)
 
             discord_member = ctx.guild.get_member(discord_id)
             discord_name = discord_member.mention if discord_member else "⚠️ Not in Server"
@@ -788,10 +802,27 @@ class GhostSync(commands.Cog):
 
             subscribers.append(f"**{ghost_member.get('email')}** -> {discord_name} ({tier_name})")
 
-        if not subscribers:
-            await ctx.send("`No linked members with active subscriptions found.`")
+        # Build list of sync role members (include all, even Ghost subscribers)
+        sync_role_members = []
+        if sync_role:
+            for discord_member in ctx.guild.members:
+                if discord_member.bot:
+                    continue
+                if sync_role in discord_member.roles:
+                    sync_role_members.append(discord_member.mention)
+
+        if not subscribers and not sync_role_members:
+            await ctx.send("`No subscribers found.`")
             return
 
-        view = PaginatedListView(ctx, subscribers, "Active Subscribers")
-        msg = await ctx.send(embed=view.get_embed(), view=view)
-        view.message = msg
+        # Send Ghost subscribers embed
+        if subscribers:
+            view = PaginatedListView(ctx, subscribers, "Ghost Subscribers")
+            msg = await ctx.send(embed=view.get_embed(), view=view)
+            view.message = msg
+
+        # Send sync role members embed (separate)
+        if sync_role_members:
+            sync_view = PaginatedListView(ctx, sync_role_members, f"{sync_role.name} (Synced)")
+            sync_msg = await ctx.send(embed=sync_view.get_embed(), view=sync_view)
+            sync_view.message = sync_msg
