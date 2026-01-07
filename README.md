@@ -35,10 +35,11 @@ Finally, load your cog(s):
 [p]load <cog_name>
 ```
 
-For cogs that have LLM integration, set the OpenAPI key in Red:
+For cogs that need API keys, set them globally in Red's shared API storage:
 
 ```
 [p]set api openai api_key,<paste here>
+[p]set api googlesheets api_key,<paste here>
 ```
 
 # Cogs
@@ -71,3 +72,8 @@ qstat -json -P -q3s dungeon.church:27960 > /var/www/html/qstat.json
 ## randomstatus
 Make a list of status activities, then cycle through them randomly or sequentially at a set interval.
 * `/randomstatus` to change settings
+
+## rollfood
+Rolls a random restaurant from [a Google Sheet](https://docs.google.com/spreadsheets/d/16FEWdSCU3c3L2XJhLEIrQLQn7eEdzNghkN44Weg2LOg/) and provides a link. Requires [Google Sheets API](https://console.cloud.google.com/flows/enableapi?apiid=sheets.googleapis.com) key.
+* `/rollfood` rolls for food
+* `[p]foodconfig sheet` to set the Sheet ID

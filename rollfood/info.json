@@ -1,0 +1,12 @@
+{
+    "name": "RollFood",
+    "author": ["DM Brad"],
+    "short": "Roll a random restaurant from a Google Sheet.",
+    "description": "Pick a random restaurant from a Google Spreadsheet and optionally start a group order.",
+    "install_msg": "Use [p]foodconfig sheet <sheet_id> to set up your restaurant list. You also need to set an API key.",
+    "requirements": ["aiohttp"],
+    "tags": ["food", "random", "restaurant", "utility"],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [3, 11, 0],
+    "end_user_data_statement": "This cog does not persistently store data about users."
+}
