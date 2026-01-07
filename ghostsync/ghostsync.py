@@ -78,6 +78,63 @@ class GhostMemberLinkView(View):
         self.add_item(Button(label="View Member in Ghost", style=discord.ButtonStyle.link, url=profile_url))
 
 
+class PaginatedListView(View):
+    """Paginated view for displaying lists of items."""
+
+    def __init__(self, ctx, items: list, title: str, per_page: int = 15):
+        super().__init__(timeout=120)
+        self.ctx = ctx
+        self.items = items
+        self.title = title
+        self.per_page = per_page
+        self.page = 0
+        self.max_page = (len(items) - 1) // per_page
+        self.message = None
+        self._update_buttons()
+
+    def _update_buttons(self):
+        self.prev_button.disabled = self.page == 0
+        self.next_button.disabled = self.page >= self.max_page
+
+    def get_embed(self) -> discord.Embed:
+        start = self.page * self.per_page
+        end = start + self.per_page
+        page_items = self.items[start:end]
+
+        embed = discord.Embed(
+            title=self.title,
+            description="\n".join(page_items),
+            color=0xff2600
+        )
+        embed.set_footer(text=f"Page {self.page + 1}/{self.max_page + 1} • {len(self.items)} total")
+        return embed
+
+    @discord.ui.button(label="◀ Prev", style=discord.ButtonStyle.secondary)
+    async def prev_button(self, interaction: discord.Interaction, button: Button):
+        if interaction.user.id != self.ctx.author.id:
+            await interaction.response.send_message("Only the command author can navigate.", ephemeral=True)
+            return
+        self.page -= 1
+        self._update_buttons()
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+
+    @discord.ui.button(label="Next ▶", style=discord.ButtonStyle.secondary)
+    async def next_button(self, interaction: discord.Interaction, button: Button):
+        if interaction.user.id != self.ctx.author.id:
+            await interaction.response.send_message("Only the command author can navigate.", ephemeral=True)
+            return
+        self.page += 1
+        self._update_buttons()
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+
+    async def on_timeout(self):
+        if self.message:
+            try:
+                await self.message.edit(view=None)
+            except discord.HTTPException:
+                pass
+
+
 class GhostSync(commands.Cog):
     """Sync Ghost blog subscriber status with Discord roles"""
 
@@ -589,15 +646,9 @@ class GhostSync(commands.Cog):
             await ctx.send("`No Ghost members have Discord IDs linked.`")
             return
 
-        # Paginate if needed
-        embed = discord.Embed(
-            title="Linked Ghost Members",
-            description="\n".join(linked[:20]),  # Show first 20
-            color=0xff2600
-        )
-        if len(linked) > 20:
-            embed.set_footer(text=f"Showing 20 of {len(linked)} linked members")
-        await ctx.send(embed=embed)
+        view = PaginatedListView(ctx, linked, "Linked Ghost Members")
+        msg = await ctx.send(embed=view.get_embed(), view=view)
+        view.message = msg
 
     @ghostsync.command()
     async def sync(self, ctx: commands.Context) -> None:
@@ -696,14 +747,9 @@ class GhostSync(commands.Cog):
             await ctx.send("`No orphans found. All Discord members are linked in Ghost.`")
             return
 
-        embed = discord.Embed(
-            title="Orphaned Discord Members",
-            description="Members with no Ghost link:\n\n" + "\n".join(orphans[:20]),
-            color=0xff2600
-        )
-        if len(orphans) > 20:
-            embed.set_footer(text=f"Showing 20 of {len(orphans)} orphans")
-        await ctx.send(embed=embed)
+        view = PaginatedListView(ctx, orphans, "Orphaned Discord Members")
+        msg = await ctx.send(embed=view.get_embed(), view=view)
+        view.message = msg
 
     @ghostsync.command()
     async def subscribers(self, ctx: commands.Context) -> None:
@@ -746,11 +792,6 @@ class GhostSync(commands.Cog):
             await ctx.send("`No linked members with active subscriptions found.`")
             return
 
-        embed = discord.Embed(
-            title="Active Subscribers",
-            description="\n".join(subscribers[:20]),
-            color=0xff2600
-        )
-        if len(subscribers) > 20:
-            embed.set_footer(text=f"Showing 20 of {len(subscribers)} subscribers")
-        await ctx.send(embed=embed)
+        view = PaginatedListView(ctx, subscribers, "Active Subscribers")
+        msg = await ctx.send(embed=view.get_embed(), view=view)
+        view.message = msg
