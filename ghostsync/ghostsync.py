@@ -236,6 +236,14 @@ class GhostSync(commands.Cog):
             log.error(f"Failed to generate JWT: {e}")
             return None
 
+    def _has_paid_access(self, ghost_member: dict) -> bool:
+        """Check if a Ghost member has paid access (paid or comped)."""
+        status = ghost_member.get("status", "")
+        if status in ("paid", "comped"):
+            return True
+        # Fallback: check subscriptions array for backwards compatibility
+        return len(ghost_member.get("subscriptions", [])) > 0
+
     async def _get_ghost_members(self, ghost_url: str) -> list | None:
         """Fetch all Ghost members with pagination."""
         token = await self._generate_jwt()
@@ -379,8 +387,7 @@ class GhostSync(commands.Cog):
                     discord_id = self._extract_discord_id(ghost_member.get("note"))
                     if not discord_id:
                         continue
-                    subscriptions = ghost_member.get("subscriptions", [])
-                    if len(subscriptions) > 0:
+                    if self._has_paid_access(ghost_member):
                         ghost_subscriber_ids.add(discord_id)
 
                 # Process role sync
@@ -642,8 +649,7 @@ class GhostSync(commands.Cog):
             discord_id = self._extract_discord_id(ghost_member.get("note"))
             if discord_id:
                 discord_member = ctx.guild.get_member(discord_id)
-                subscriptions = ghost_member.get("subscriptions", [])
-                status = "Subscribed" if subscriptions else "Free"
+                status = "Subscribed" if self._has_paid_access(ghost_member) else "Free"
                 discord_name = discord_member.mention if discord_member else "⚠️ Not in Server"
                 linked.append(f"**{ghost_member.get('email')}** -> {discord_name} ({status})")
 
@@ -686,8 +692,7 @@ class GhostSync(commands.Cog):
             discord_id = self._extract_discord_id(ghost_member.get("note"))
             if not discord_id:
                 continue
-            subscriptions = ghost_member.get("subscriptions", [])
-            if len(subscriptions) > 0:
+            if self._has_paid_access(ghost_member):
                 ghost_subscriber_ids.add(discord_id)
 
         roles_added = 0
@@ -784,8 +789,7 @@ class GhostSync(commands.Cog):
             if not discord_id:
                 continue
 
-            subscriptions = ghost_member.get("subscriptions", [])
-            if not subscriptions:
+            if not self._has_paid_access(ghost_member):
                 continue
 
             ghost_subscriber_ids.add(discord_id)
@@ -793,12 +797,15 @@ class GhostSync(commands.Cog):
             discord_member = ctx.guild.get_member(discord_id)
             discord_name = discord_member.mention if discord_member else "⚠️ Not in Server"
 
-            # Get tier name from subscription
+            # Get tier name from subscription (comped members will show "Comped")
             tier_name = "Unknown Tier"
+            subscriptions = ghost_member.get("subscriptions", [])
             if subscriptions:
                 sub = subscriptions[0]  # Get first/active subscription
                 tier = sub.get("tier") or sub.get("price", {}).get("tier") or {}
                 tier_name = tier.get("name", "Unknown Tier")
+            elif ghost_member.get("status") == "comped":
+                tier_name = "Comped"
 
             subscribers.append(f"**{ghost_member.get('email')}** -> {discord_name} ({tier_name})")
 
