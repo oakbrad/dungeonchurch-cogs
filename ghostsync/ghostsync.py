@@ -720,8 +720,8 @@ class GhostSync(commands.Cog):
         else:
             await ctx.send(error("`Failed to update Ghost member. Check API keys and permissions.`"))
 
-    @ghostsync.command(name="list")
-    async def list_linked(self, ctx: commands.Context) -> None:
+    @ghostsync.command(name="members")
+    async def list_members(self, ctx: commands.Context) -> None:
         """List all Ghost members with Discord IDs in their notes."""
         ghost_url = await self.config.guild(ctx.guild).ghost_url()
         if not ghost_url:
