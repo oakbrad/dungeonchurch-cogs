@@ -157,6 +157,7 @@ class GhostSync(commands.Cog):
             "subscriber_role": None,     # Discord Role ID for subscribers
             "log_channel": None,         # Optional channel for notifications
             "sync_role": None,           # Secondary role to sync to subscriber role
+            "label_mappings": {},        # {role_id_str: label_slug} for Discord role -> Ghost label sync
         }
         self.config.register_guild(**default_guild)
 
@@ -257,7 +258,7 @@ class GhostSync(commands.Cog):
 
         async with aiohttp.ClientSession() as session:
             while True:
-                url = f"{ghost_url}/ghost/api/admin/members/?limit={limit}&page={page}&include=subscriptions"
+                url = f"{ghost_url}/ghost/api/admin/members/?limit={limit}&page={page}&include=subscriptions,labels"
                 try:
                     async with session.get(url, headers=headers) as response:
                         if response.status != 200:
@@ -329,6 +330,57 @@ class GhostSync(commands.Cog):
                 log.error(f"Error updating Ghost member note: {e}")
                 return False
 
+    async def _get_ghost_labels(self, ghost_url: str) -> list | None:
+        """Fetch all Ghost labels."""
+        token = await self._generate_jwt()
+        if not token:
+            return None
+
+        headers = {"Authorization": f"Ghost {token}"}
+        url = f"{ghost_url}/ghost/api/admin/labels/"
+
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.get(url, headers=headers) as response:
+                    if response.status != 200:
+                        log.error(f"Ghost API error fetching labels: HTTP {response.status}")
+                        return None
+                    data = await response.json()
+                    return data.get("labels", [])
+            except Exception as e:
+                log.error(f"Error fetching Ghost labels: {e}")
+                return None
+
+    async def _update_ghost_member_labels(self, ghost_url: str, member_id: str, labels: list) -> bool:
+        """Update a Ghost member's labels."""
+        token = await self._generate_jwt()
+        if not token:
+            return False
+
+        headers = {
+            "Authorization": f"Ghost {token}",
+            "Content-Type": "application/json"
+        }
+        url = f"{ghost_url}/ghost/api/admin/members/{member_id}/"
+        # Ghost API expects label objects with at least 'name' or 'slug'
+        payload = {
+            "members": [{
+                "labels": labels
+            }]
+        }
+
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.put(url, headers=headers, json=payload) as response:
+                    if response.status != 200:
+                        body = await response.text()
+                        log.error(f"Ghost API error updating member labels: HTTP {response.status} - {body}")
+                        return False
+                    return True
+            except Exception as e:
+                log.error(f"Error updating Ghost member labels: {e}")
+                return False
+
     def _extract_discord_id(self, note: str | None) -> int | None:
         """Extract a Discord ID from a Ghost member's note field."""
         if not note:
@@ -351,20 +403,15 @@ class GhostSync(commands.Cog):
                 subscriber_role_id = await self.config.guild(guild).subscriber_role()
                 log_channel_id = await self.config.guild(guild).log_channel()
                 sync_role_id = await self.config.guild(guild).sync_role()
+                label_mappings = await self.config.guild(guild).label_mappings()
 
-                # Skip if not configured
-                if not ghost_url or not subscriber_role_id:
+                # Skip if not configured (need ghost_url and at least one sync target)
+                if not ghost_url or (not subscriber_role_id and not label_mappings):
                     log.debug(f"Guild '{guild.name}' not fully configured, skipping sync.")
                     await asyncio.sleep(sync_interval)
                     continue
 
-                subscriber_role = guild.get_role(subscriber_role_id)
-                if not subscriber_role:
-                    log.warning(f"Subscriber role {subscriber_role_id} not found in guild '{guild.name}'.")
-                    await asyncio.sleep(sync_interval)
-                    continue
-
-                # Get optional sync role
+                subscriber_role = guild.get_role(subscriber_role_id) if subscriber_role_id else None
                 sync_role = guild.get_role(sync_role_id) if sync_role_id else None
 
                 # Fetch Ghost members
@@ -381,47 +428,91 @@ class GhostSync(commands.Cog):
                     await asyncio.sleep(sync_interval)
                     continue
 
-                # Build set of Discord IDs with Ghost subscriptions
-                ghost_subscriber_ids = set()
-                for ghost_member in members:
-                    discord_id = self._extract_discord_id(ghost_member.get("note"))
-                    if not discord_id:
-                        continue
-                    if self._has_paid_access(ghost_member):
-                        ghost_subscriber_ids.add(discord_id)
+                # Process role sync (if subscriber role is configured)
+                if subscriber_role:
+                    # Build set of Discord IDs with Ghost subscriptions
+                    ghost_subscriber_ids = set()
+                    for ghost_member in members:
+                        discord_id = self._extract_discord_id(ghost_member.get("note"))
+                        if not discord_id:
+                            continue
+                        if self._has_paid_access(ghost_member):
+                            ghost_subscriber_ids.add(discord_id)
 
-                # Process role sync
-                roles_added = 0
-                roles_removed = 0
+                    roles_added = 0
+                    roles_removed = 0
 
-                for discord_member in guild.members:
-                    if discord_member.bot:
-                        continue
+                    for discord_member in guild.members:
+                        if discord_member.bot:
+                            continue
 
-                    has_role = subscriber_role in discord_member.roles
+                        has_role = subscriber_role in discord_member.roles
 
-                    # Check if member should have subscriber role
-                    has_ghost_subscription = discord_member.id in ghost_subscriber_ids
-                    has_sync_role = sync_role and sync_role in discord_member.roles
-                    should_have_role = has_ghost_subscription or has_sync_role
+                        # Check if member should have subscriber role
+                        has_ghost_subscription = discord_member.id in ghost_subscriber_ids
+                        has_sync_role = sync_role and sync_role in discord_member.roles
+                        should_have_role = has_ghost_subscription or has_sync_role
 
-                    if should_have_role and not has_role:
-                        try:
-                            reason = "GhostSync: Active subscription" if has_ghost_subscription else f"GhostSync: Has {sync_role.name} role"
-                            await discord_member.add_roles(subscriber_role, reason=reason)
-                            roles_added += 1
-                            log.debug(f"Added subscriber role to {discord_member} in {guild.name}")
-                        except discord.Forbidden:
-                            log.error(f"Missing permissions to add role to {discord_member}")
-                    elif not should_have_role and has_role:
-                        try:
-                            await discord_member.remove_roles(subscriber_role, reason="GhostSync: No active subscription or sync role")
-                            roles_removed += 1
-                            log.debug(f"Removed subscriber role from {discord_member} in {guild.name}")
-                        except discord.Forbidden:
-                            log.error(f"Missing permissions to remove role from {discord_member}")
+                        if should_have_role and not has_role:
+                            try:
+                                reason = "GhostSync: Active subscription" if has_ghost_subscription else f"GhostSync: Has {sync_role.name} role"
+                                await discord_member.add_roles(subscriber_role, reason=reason)
+                                roles_added += 1
+                                log.debug(f"Added subscriber role to {discord_member} in {guild.name}")
+                            except discord.Forbidden:
+                                log.error(f"Missing permissions to add role to {discord_member}")
+                        elif not should_have_role and has_role:
+                            try:
+                                await discord_member.remove_roles(subscriber_role, reason="GhostSync: No active subscription or sync role")
+                                roles_removed += 1
+                                log.debug(f"Removed subscriber role from {discord_member} in {guild.name}")
+                            except discord.Forbidden:
+                                log.error(f"Missing permissions to remove role from {discord_member}")
 
-                log.info(f"Sync complete for '{guild.name}': +{roles_added} -{roles_removed} roles")
+                    log.info(f"Role sync complete for '{guild.name}': +{roles_added} -{roles_removed} roles")
+
+                # Process label mappings (Discord role -> Ghost label)
+                if label_mappings:
+                    # Build mapping of Discord ID -> Ghost member
+                    discord_to_ghost = {}
+                    for ghost_member in members:
+                        discord_id = self._extract_discord_id(ghost_member.get("note"))
+                        if discord_id:
+                            discord_to_ghost[discord_id] = ghost_member
+
+                    labels_added = 0
+                    labels_removed = 0
+
+                    for role_id_str, label_slug in label_mappings.items():
+                        role_id = int(role_id_str)
+                        role = guild.get_role(role_id)
+                        if not role:
+                            log.warning(f"Label mapping role {role_id} not found in guild '{guild.name}'.")
+                            continue
+
+                        discord_members_with_role = {m.id for m in role.members if not m.bot}
+
+                        for discord_id, ghost_member in discord_to_ghost.items():
+                            has_role = discord_id in discord_members_with_role
+                            current_labels = ghost_member.get("labels", [])
+                            current_label_slugs = {l.get("slug") for l in current_labels}
+                            has_label = label_slug in current_label_slugs
+
+                            if has_role and not has_label:
+                                # Ghost API expects 'name' field for labels
+                                new_labels = current_labels + [{"name": label_slug}]
+                                if await self._update_ghost_member_labels(ghost_url, ghost_member["id"], new_labels):
+                                    labels_added += 1
+                                    ghost_member["labels"] = new_labels
+                                    log.debug(f"Added label '{label_slug}' to Ghost member {ghost_member.get('email')}")
+                            elif not has_role and has_label:
+                                new_labels = [l for l in current_labels if l.get("slug") != label_slug]
+                                if await self._update_ghost_member_labels(ghost_url, ghost_member["id"], new_labels):
+                                    labels_removed += 1
+                                    ghost_member["labels"] = new_labels
+                                    log.debug(f"Removed label '{label_slug}' from Ghost member {ghost_member.get('email')}")
+
+                    log.info(f"Label sync complete for '{guild.name}': +{labels_added} -{labels_removed} labels")
 
                 # Wait for the next interval
                 await asyncio.sleep(sync_interval)
@@ -663,20 +754,21 @@ class GhostSync(commands.Cog):
 
     @ghostsync.command()
     async def sync(self, ctx: commands.Context) -> None:
-        """Force an immediate sync of subscriber roles."""
+        """Force an immediate sync of subscriber roles and label mappings."""
         ghost_url = await self.config.guild(ctx.guild).ghost_url()
         subscriber_role_id = await self.config.guild(ctx.guild).subscriber_role()
         sync_role_id = await self.config.guild(ctx.guild).sync_role()
+        label_mappings = await self.config.guild(ctx.guild).label_mappings()
 
-        if not ghost_url or not subscriber_role_id:
-            await ctx.send(error("`GhostSync not fully configured. Set URL and role first.`"))
+        if not ghost_url:
+            await ctx.send(error("`Ghost URL not configured. Use [p]ghostsync url first.`"))
             return
 
-        subscriber_role = ctx.guild.get_role(subscriber_role_id)
-        if not subscriber_role:
-            await ctx.send(error("`Configured subscriber role not found.`"))
+        if not subscriber_role_id and not label_mappings:
+            await ctx.send(error("`Nothing to sync. Configure a subscriber role or label mappings first.`"))
             return
 
+        subscriber_role = ctx.guild.get_role(subscriber_role_id) if subscriber_role_id else None
         sync_role = ctx.guild.get_role(sync_role_id) if sync_role_id else None
 
         await ctx.defer()
@@ -686,41 +778,78 @@ class GhostSync(commands.Cog):
             await ctx.send(error("`Failed to fetch Ghost members. Check API keys.`"))
             return
 
-        # Build set of Discord IDs with Ghost subscriptions
-        ghost_subscriber_ids = set()
-        for ghost_member in members:
-            discord_id = self._extract_discord_id(ghost_member.get("note"))
-            if not discord_id:
-                continue
-            if self._has_paid_access(ghost_member):
-                ghost_subscriber_ids.add(discord_id)
-
         roles_added = 0
         roles_removed = 0
 
-        for discord_member in ctx.guild.members:
-            if discord_member.bot:
-                continue
+        # Process role sync (if subscriber role is configured)
+        if subscriber_role:
+            ghost_subscriber_ids = set()
+            for ghost_member in members:
+                discord_id = self._extract_discord_id(ghost_member.get("note"))
+                if not discord_id:
+                    continue
+                if self._has_paid_access(ghost_member):
+                    ghost_subscriber_ids.add(discord_id)
 
-            has_role = subscriber_role in discord_member.roles
-            has_ghost_subscription = discord_member.id in ghost_subscriber_ids
-            has_sync_role = sync_role and sync_role in discord_member.roles
-            should_have_role = has_ghost_subscription or has_sync_role
+            for discord_member in ctx.guild.members:
+                if discord_member.bot:
+                    continue
 
-            if should_have_role and not has_role:
-                try:
-                    await discord_member.add_roles(subscriber_role, reason="GhostSync: Manual sync")
-                    roles_added += 1
-                except discord.Forbidden:
-                    pass
-            elif not should_have_role and has_role:
-                try:
-                    await discord_member.remove_roles(subscriber_role, reason="GhostSync: Manual sync")
-                    roles_removed += 1
-                except discord.Forbidden:
-                    pass
+                has_role = subscriber_role in discord_member.roles
+                has_ghost_subscription = discord_member.id in ghost_subscriber_ids
+                has_sync_role = sync_role and sync_role in discord_member.roles
+                should_have_role = has_ghost_subscription or has_sync_role
 
-        await ctx.send(success(f"`Sync complete: +{roles_added} roles added, -{roles_removed} roles removed.`"))
+                if should_have_role and not has_role:
+                    try:
+                        await discord_member.add_roles(subscriber_role, reason="GhostSync: Manual sync")
+                        roles_added += 1
+                    except discord.Forbidden:
+                        pass
+                elif not should_have_role and has_role:
+                    try:
+                        await discord_member.remove_roles(subscriber_role, reason="GhostSync: Manual sync")
+                        roles_removed += 1
+                    except discord.Forbidden:
+                        pass
+
+        # Process label mappings
+        labels_added = 0
+        labels_removed = 0
+
+        if label_mappings:
+            discord_to_ghost = {}
+            for ghost_member in members:
+                discord_id = self._extract_discord_id(ghost_member.get("note"))
+                if discord_id:
+                    discord_to_ghost[discord_id] = ghost_member
+
+            for role_id_str, label_slug in label_mappings.items():
+                role = ctx.guild.get_role(int(role_id_str))
+                if not role:
+                    continue
+
+                discord_members_with_role = {m.id for m in role.members if not m.bot}
+
+                for discord_id, ghost_member in discord_to_ghost.items():
+                    has_role = discord_id in discord_members_with_role
+                    current_labels = ghost_member.get("labels", [])
+                    current_label_slugs = {l.get("slug") for l in current_labels}
+                    has_label = label_slug in current_label_slugs
+
+                    if has_role and not has_label:
+                        # Ghost API expects 'name' field for labels
+                        new_labels = current_labels + [{"name": label_slug}]
+                        if await self._update_ghost_member_labels(ghost_url, ghost_member["id"], new_labels):
+                            labels_added += 1
+                            ghost_member["labels"] = new_labels
+                    elif not has_role and has_label:
+                        new_labels = [l for l in current_labels if l.get("slug") != label_slug]
+                        if await self._update_ghost_member_labels(ghost_url, ghost_member["id"], new_labels):
+                            labels_removed += 1
+                            ghost_member["labels"] = new_labels
+
+        await ctx.send(success(f"`Sync complete: +{roles_added} roles, -{roles_removed} roles, +{labels_added} labels, -{labels_removed} labels.`"))
 
     @ghostsync.command()
     async def orphans(self, ctx: commands.Context) -> None:
@@ -833,3 +962,63 @@ class GhostSync(commands.Cog):
             sync_view = PaginatedListView(ctx, sync_role_members, f"{sync_role.name} (Synced)")
             sync_msg = await ctx.send(embed=sync_view.get_embed(), view=sync_view)
             sync_view.message = sync_msg
+
+    @ghostsync.command()
+    async def label(self, ctx: commands.Context, role: discord.Role, label_slug: str) -> None:
+        """Add or update a Discord role to Ghost label mapping."""
+        ghost_url = await self.config.guild(ctx.guild).ghost_url()
+        if not ghost_url:
+            await ctx.send(error("`Ghost URL not configured. Use [p]ghostsync url first.`"))
+            return
+
+        await ctx.defer()
+
+        # Validate that the label exists in Ghost
+        labels = await self._get_ghost_labels(ghost_url)
+        if labels is None:
+            await ctx.send(error("`Failed to fetch Ghost labels. Check API keys.`"))
+            return
+
+        label_slugs = {l.get("slug") for l in labels}
+        if label_slug not in label_slugs:
+            available = ", ".join(sorted(label_slugs)) if label_slugs else "none"
+            await ctx.send(error(f"`Label '{label_slug}' not found in Ghost. Available: {available}`"))
+            return
+
+        # Save the mapping
+        async with self.config.guild(ctx.guild).label_mappings() as mappings:
+            mappings[str(role.id)] = label_slug
+
+        await ctx.send(success(f"`Label mapping set: {role.name} -> {label_slug}`"))
+
+    @ghostsync.command()
+    async def labelrem(self, ctx: commands.Context, role: discord.Role) -> None:
+        """Remove a Discord role to Ghost label mapping."""
+        async with self.config.guild(ctx.guild).label_mappings() as mappings:
+            if str(role.id) in mappings:
+                label_slug = mappings.pop(str(role.id))
+                await ctx.send(success(f"`Label mapping removed: {role.name} -> {label_slug}`"))
+            else:
+                await ctx.send(error(f"`No label mapping found for {role.name}.`"))
+
+    @ghostsync.command()
+    async def labels(self, ctx: commands.Context) -> None:
+        """List all configured Discord role to Ghost label mappings."""
+        mappings = await self.config.guild(ctx.guild).label_mappings()
+
+        if not mappings:
+            await ctx.send("`No label mappings configured. Use [p]ghostsync label <role> <label_slug> to add one.`")
+            return
+
+        lines = []
+        for role_id_str, label_slug in mappings.items():
+            role = ctx.guild.get_role(int(role_id_str))
+            role_name = role.name if role else f"Unknown ({role_id_str})"
+            lines.append(f"**{role_name}** -> `{label_slug}`")
+
+        embed = discord.Embed(
+            title="Label Mappings (Discord Role -> Ghost Label)",
+            description="\n".join(lines),
+            color=0xff2600
+        )
+        await ctx.send(embed=embed)
