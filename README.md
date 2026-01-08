@@ -16,7 +16,7 @@
 
 Focused on making RPG, D&D, & game related cogs - ideas or pull requests welcome.
 
-----
+## Installation
 To add these cogs to your instance, run this command first (`[p]` is your bot prefix):
 
 ```
@@ -34,6 +34,7 @@ Finally, load your cog(s):
 ```
 [p]load <cog_name>
 ```
+## API Keys
 
 For cogs that need API keys, set them globally in Red's shared API storage:
 
@@ -43,13 +44,18 @@ For cogs that need API keys, set them globally in Red's shared API storage:
 [p]set api ghost key_id,<id> key_secret,<secret>
 ```
 
-# Cogs
-Current cogs and their commands. `[p]` is your bot prefix, `/` slash commands indicate a hybrid command. To register slash commands, first load the cog, then list the commands available. Enable the commands you want to register, then sync them with Discord.
+## Slash Commands
+To register slash commands, first load the cog, then list the commands available. Enable the commands you want to register, then sync them with Discord.
+
 ```
 [p]slash list
 [p]slash enable <command>
 [p]slash sync
 ```
+
+# Cogs
+Current cogs and their commands. `[p]` is your bot prefix, `/` slash commands indicate a hybrid command. 
+
 ## augury
 A simple roller that transforms into a customizable NPC when you add an OpenAI API key.
 * `/augury` make an appeal to the gods
@@ -66,18 +72,31 @@ Forked from [PCXCogs](https://github.com/PhasecoreX/PCXCogs). I added better for
 * `[p]diceset` to change settings
 
 ## ghostsync
-Manage linking [Ghost](https://ghost.org) members to Discord accounts and sync subscription status to a Discord role. Discord IDs are stored in the Ghost member private Note. Requires setting a Ghost Integration Admin API key & secret.
+Tools for linking [Ghost](https://ghost.org) members to Discord accounts, syncing subscription status to a Discord role, and syncing Discord roles to Ghost labels. This allows you to reward Ghost subscribers with Discord roles, or segment your Ghost newsletters by Discord roles. Requires setting a Ghost Integration Admin API key & secret.
 
+> *Privacy Note:* this cog stores the user's numeric Discord ID in the Ghost Member Profile, under the private "Note". This is visible to any Ghost staff that can see the Member list.
+
+**Configuration**
 * `[p]ghostsync url` base API URL
 * `[p]ghostsync interval` how often to sync in seconds
 * `[p]ghostsync logchannel` report API failures to this channel
-* `[p]ghostsync role` role added/removed based on Ghost subscription
+* `[p]ghostsync settings` view current settings
+
+**Ghost Subscription → Discord Role**
+* `[p]ghostsync role` role added/removed based on Ghost paid (or comped) subscription
 * `[p]ghostsync rolesync` sync a secondary role (ex: Server Boosters) to the primary role
+
+**Discord Role → Ghost Label**
+* `[p]ghostsync label <@role> <label_slug>` map a Discord role to a Ghost label
+* `[p]ghostsync labelrem <@role>` remove a label mapping
+* `[p]ghostsync labels` list all label mappings
+
+**Member Management**
 * `[p]ghostsync link <email> <@mention>` link a member email to a Discord user (stores ID in Member Note)
 * `[p]ghostsync unlink <email OR @mention>` unlink a user (removes ID from Member Note)
-* `[p]ghostsync list` list all linked members
-* `[p]ghostsync subscribers` list subscribers, their Discord name, and subscription tier name
-* `[p]ghostsync orphans` list Ghost members who are not linked to Discord IDs
+* `[p]ghostsync members` list all linked members
+* `[p]ghostsync subscribers` list linked subscribers & their subscription tier name
+* `[p]ghostsync orphans` list Discord members not linked to Ghost
 * `[p]ghostsync sync` force a sync
 
 
