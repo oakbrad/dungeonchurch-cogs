@@ -1,0 +1,12 @@
+{
+    "name": "Lore",
+    "author": ["DM Brad"],
+    "short": "Query the Outline wiki for lore and world-building.",
+    "description": "Search the Outline wiki for documents and get AI-flavored responses from the Oracle of Pyora. Features include backlinks, related search results, document images, and configurable prompts.",
+    "install_msg": "Set your Outline API key with [p]set api outline api_key,<key>. Optionally set OpenAI key for AI flavor text. Configure with [p]loreconfig.",
+    "requirements": ["aiohttp"],
+    "tags": ["lore", "wiki", "outline", "dnd", "worldbuilding", "rpg"],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [3, 11, 0],
+    "end_user_data_statement": "This cog does not persistently store data about users."
+}
