@@ -42,6 +42,7 @@ For cogs that need API keys, set them globally in Red's shared API storage:
 [p]set api openai api_key,<paste here>
 [p]set api googlesheets api_key,<paste here>
 [p]set api ghost key_id,<id> key_secret,<secret>
+[p]set api outline api_key,<paste here>
 ```
 
 ## Slash Commands
@@ -87,7 +88,7 @@ Tools for linking [Ghost](https://ghost.org) members to Discord accounts, syncin
 * `[p]ghostsync rolesync` sync a secondary role (ex: Server Boosters) to the primary role
 
 **Discord Role → Ghost Label**
-* `[p]ghostsync label <@role> <label_slug>` map a Discord role to a Ghost label
+* `[p]ghostsync label <@role> <label_name>` map a Discord role to a Ghost label
 * `[p]ghostsync labelrem <@role>` remove a label mapping
 * `[p]ghostsync labels` list all label mappings
 
@@ -99,6 +100,11 @@ Tools for linking [Ghost](https://ghost.org) members to Discord accounts, syncin
 * `[p]ghostsync orphans` list Discord members not linked to Ghost
 * `[p]ghostsync sync` force a sync
 
+## lore
+Search an [Outline](https://getoutline.com) wiki and return the first article as an embed. Optionally adds AI flavor text with configurable prompt.
+
+* `/lore <query>`
+* `.loreconfig` set base URL & prompts
 
 ## q3stat
 Quake III Arena [server](https://quake.dungeon.church) notifications with [qstat](https://github.com/Unity-Technologies/qstat). Run qstat via crontab on your server to output JSON to a publicly accessible file:
