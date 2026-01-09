@@ -99,4 +99,68 @@ class ContestedRollView(View):
                     view = None
                 )
             except:
-                pass # Message was not found / deleted            
+                pass # Message was not found / deleted
+
+
+class CoinFlipButton(Button):
+    def __init__(self, choice: str, challenger, challenged, coin_result: str):
+        emoji = "🪙" if choice == "heads" else "🪙"
+        super().__init__(label=choice.capitalize(), style=discord.ButtonStyle.primary, emoji=emoji)
+        self.choice = choice
+        self.challenger = challenger
+        self.challenged = challenged
+        self.coin_result = coin_result
+
+    async def callback(self, interaction: discord.Interaction):
+        # Only the challenged user can press the button
+        if interaction.user.id != self.challenged.id:
+            await interaction.response.send_message("It's not your call!", ephemeral=True)
+            return
+
+        # Determine if the challenged user won
+        won = self.choice == self.coin_result
+
+        if won:
+            result_message = (
+                f"### 🪙 {self.challenger.mention} challenged {self.challenged.mention} to a coin flip!\n\n"
+                f"> {self.challenged.display_name} called **{self.choice}**...\n"
+                f"## 👑 It's {self.coin_result}! {self.challenged.display_name} wins!"
+            )
+        else:
+            result_message = (
+                f"### 🪙 {self.challenger.mention} challenged {self.challenged.mention} to a coin flip!\n\n"
+                f"> {self.challenged.display_name} called **{self.choice}**...\n"
+                f"## 👑 It's {self.coin_result}! {self.challenger.display_name} wins!"
+            )
+
+        if self.view:
+            self.view.stop()
+        await self.view.message.edit(content=result_message, view=None)
+        await interaction.response.defer()
+
+
+class CoinFlipView(View):
+    def __init__(self, challenger, challenged, coin_result: str, timeout: float):
+        super().__init__(timeout=timeout)
+        self.message = None
+        self.challenger = challenger
+        self.challenged = challenged
+        self.coin_result = coin_result
+
+        # Add heads and tails buttons
+        self.add_item(CoinFlipButton("heads", challenger, challenged, coin_result))
+        self.add_item(CoinFlipButton("tails", challenger, challenged, coin_result))
+
+    def set_message(self, message):
+        self.message = message
+
+    async def on_timeout(self):
+        """Timeout the view."""
+        if self.message:
+            try:
+                await self.message.edit(
+                    content=f"> 😞 *{self.challenged.mention} did not respond to {self.challenger.mention}'s coin flip challenge.*",
+                    view=None
+                )
+            except:
+                pass
