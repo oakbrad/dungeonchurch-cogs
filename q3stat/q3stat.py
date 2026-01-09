@@ -167,11 +167,18 @@ class Q3stat(commands.Cog):
         Process the JSON data to determine player join/leave events and send notifications.
         This function filters out players with a ping of 0, compares current and previous states,
         sends notifications to the designated thread (if set) or channel, and updates the previous player list.
+        Notifications are only sent when player count meets or exceeds the min_players threshold.
         """
         players = current_state.get("players", [])
         # Filter out players with ping = 0 (bots)
         human_players = [player["name"] for player in players if player.get("ping", 0) > 0]
         log.debug(f"Human players for guild '{guild.name}': {human_players}")
+
+        # Get minimum players threshold
+        min_players = await self.config.guild(guild).min_players()
+        current_player_count = len(human_players)
+        previous_player_count = len(previous_players)
+        log.debug(f"Player count: current={current_player_count}, previous={previous_player_count}, min={min_players}")
 
         # Sort lists for consistent comparison
         human_players_sorted = sorted(human_players)
@@ -206,8 +213,12 @@ class Q3stat(commands.Cog):
             if role_obj:
                 role_mention = f"{role_obj.mention} "
 
+        # Check if min_players threshold is met for sending notifications
+        should_notify = current_player_count >= min_players
+        log.debug(f"Should notify: {should_notify} (current={current_player_count}, min={min_players})")
+
         # Send notifications for new players and save the join message ID in config
-        if new_players:
+        if new_players and should_notify:
             for player in new_players:
                 try:
                     msg = await target_channel.send(f"{role_mention} 🔫 **{player}** has entered the arena!")
@@ -220,6 +231,9 @@ class Q3stat(commands.Cog):
             await self.config.guild(guild).join_messages.set(join_messages)
 
         # Process old players: if match_cleanup is enabled, delete their join message.
+        # Only send leave notifications when current count is still at or above threshold.
+        # However, if cleanup is enabled, we need to delete join messages even when dropping below
+        # threshold (since those messages were created when threshold was met).
         if old_players:
             for player in old_players:
                 if match_cleanup:
@@ -237,12 +251,14 @@ class Q3stat(commands.Cog):
                     else:
                         log.warning(f"No join message recorded for player {player} in guild '{guild.name}'.")
                 else:
-                    try:
-                        await target_channel.send(f"{role_mention} 🚫 **{player}** has left the arena!")
-                    except discord.Forbidden:
-                        log.error(f"Missing permissions to send exit message in {target_channel} for guild '{guild.name}'.")
-                    except discord.HTTPException as http_exc:
-                        log.error(f"HTTP error occurred while sending exit message for player {player} in guild '{guild.name}': {http_exc}")
+                    # Only send leave message if we're still at or above threshold
+                    if should_notify:
+                        try:
+                            await target_channel.send(f"{role_mention} 🚫 **{player}** has left the arena!")
+                        except discord.Forbidden:
+                            log.error(f"Missing permissions to send exit message in {target_channel} for guild '{guild.name}'.")
+                        except discord.HTTPException as http_exc:
+                            log.error(f"HTTP error occurred while sending exit message for player {player} in guild '{guild.name}': {http_exc}")
             if match_cleanup:
                 await self.config.guild(guild).join_messages.set(join_messages)
 
