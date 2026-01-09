@@ -251,20 +251,45 @@ class Dice(commands.Cog):
         view.set_message(sent_message)  # Link the view to the message
 
     @commands.hybrid_command()
-    async def flipcoin(self, ctx: commands.Context) -> None:
-        """Flip coin, heads or tails """
+    async def flipcoin(self, ctx: commands.Context, challenge: discord.Member = None) -> None:
+        """Flip coin, heads or tails.
+
+        Optionally challenge someone to call it!
+        """
         dice_roller = pyhedrals.DiceRoller(
                 maxDice=await self.config.max_dice_rolls(),
                 maxSides=await self.config.max_die_sides(),
             )
         result = dice_roller.parse("1d2").result
-        if result == 1:
-            coin = "heads"
-        else:
-            coin = "tails"
-        roll_message = f"{emojis['d2']} {ctx.message.author.mention} flipped a coin and got `{coin}`"
-        await ctx.send(roll_message)
-       # Clean up prefix messages according to setting
+        coin = "heads" if result == 1 else "tails"
+
+        # Handle single flip (no challenge)
+        if not challenge:
+            roll_message = f"{emojis['d2']} {ctx.message.author.mention} flipped a coin and got `{coin}`"
+            await ctx.send(roll_message)
+            # Clean up prefix messages according to setting
+            if not ctx.interaction and await self.config.message_cleanup():
+                await ctx.message.delete()
+            return
+
+        # Handle challenge
+        timeout = await self.config.timeout()
+        if challenge.bot:
+            await ctx.send("`You can't challenge a bot!`", ephemeral=True)
+            return
+        if ctx.author.id == challenge.id:
+            await ctx.send("`You can't challenge yourself, silly!`", ephemeral=True)
+            return
+
+        challenge_message = (
+            f"### 🪙 {ctx.author.mention} challenges {challenge.mention} to a coin flip!\n"
+            f"### {challenge.mention}, call it!"
+        )
+        view = contested.CoinFlipView(ctx.author, challenge, coin, timeout)
+        sent_message = await ctx.send(challenge_message, view=view)
+        view.set_message(sent_message)
+
+        # Clean up prefix messages according to setting
         if not ctx.interaction and await self.config.message_cleanup():
             await ctx.message.delete() 
 

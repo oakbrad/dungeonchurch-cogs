@@ -65,17 +65,18 @@ A simple roller that transforms into a customizable NPC when you add an OpenAI A
 ## dice
 Forked from [PCXCogs](https://github.com/PhasecoreX/PCXCogs). I added better formatting and commands useful for RPG players, including contested rolls.
 * `/roll` roll complicated [dice formulas](https://github.com/StarlitGhost/pyhedrals)
-* `/qr [mod] [@challenge]` quick roll 1d20
-* `/adv [mod]` quick roll 2d20dl
-* `/dis [mod]` quick roll 2d20dh
+* `/qr <mod> <@mention>` quick roll 1d20, optionally challenge with a mention
+* `/adv <mod>` quick roll 2d20dl
+* `/dis <mod>` quick roll 2d20dh
 * `/randstats` roll ability scores within a set range
-* `/flipcoin` flip a coin, get heads or tails
+* `/flipcoin <@mention>` flip a coin, get heads or tails. Mention to have someone else call it.
 * `/eightball` ask the Magic 8 Ball
 * `[p]diceset` to change settings
 
 ## dragonchess (threes)
-The dice game threes. Tracks stats per player and a leaderboard.
-* `/threes play <@challenge>` start a game with an optional challenge, otherwise it's open to first comer
+The dice game threes, aka dragonchess if you play in [Pyora](https://github.com/oakbrad/dungeonchurch-pyora). Tracks stats per player and a leaderboard.
+* `/threes rules` show the rules
+* `/threes play <@mention>` start a game with an optional challenge, otherwise it's open to first comer
 * `/threes leaderboard` server rankings
 * `/threes stats <@mention>` see player stats, defaults to self with no mention
 * `[p]dc` settings, reset rankings, set timeout, debug game state
