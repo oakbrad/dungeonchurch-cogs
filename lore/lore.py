@@ -1,7 +1,9 @@
+import io
 import re
 import logging
 import aiohttp
 import discord
+from PIL import Image
 from discord.ui import Button, View
 from redbot.core import commands, Config, checks
 from redbot.core.utils.chat_formatting import error, success
@@ -35,11 +37,20 @@ class RefreshButton(Button):
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer()
         try:
-            content, embeds, new_view = await self.cog._build_lore_response(
+            content, embeds, new_view, files = await self.cog._build_lore_response(
                 self.guild_id, self.query
             )
-            new_view.set_message(self.view.message)
-            await self.view.message.edit(content=content, embeds=embeds, view=new_view)
+            # Delete old message and send new one (edit doesn't support new attachments)
+            old_message = self.view.message
+            new_message = await interaction.followup.send(
+                content=content, embeds=embeds, view=new_view, files=files
+            )
+            new_view.set_message(new_message)
+            if old_message:
+                try:
+                    await old_message.delete()
+                except discord.NotFound:
+                    pass
         except Exception as e:
             log.error(f"Refresh failed: {e}")
             await interaction.followup.send(
@@ -186,13 +197,148 @@ class Lore(commands.Cog):
                 names.append(data["data"].get("name", "Unknown"))
         return names
 
+    def _resize_image_for_discord(self, data: bytes, max_size: int = 8_000_000) -> tuple[bytes, str]:
+        """Resize an image to fit within Discord's file size limit.
+
+        Returns (image_bytes, extension).
+        """
+        if len(data) <= max_size:
+            # Try to detect format from data
+            try:
+                img = Image.open(io.BytesIO(data))
+                fmt = img.format.lower() if img.format else "png"
+                ext = "jpg" if fmt == "jpeg" else fmt
+                return data, ext
+            except Exception:
+                return data, "png"
+
+        try:
+            img = Image.open(io.BytesIO(data))
+
+            # Convert RGBA to RGB for JPEG (no alpha support)
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+
+            # Progressively reduce size until under limit
+            quality = 85
+            scale = 1.0
+
+            while True:
+                output = io.BytesIO()
+
+                # Resize if needed
+                if scale < 1.0:
+                    new_size = (int(img.width * scale), int(img.height * scale))
+                    resized = img.resize(new_size, Image.Resampling.LANCZOS)
+                else:
+                    resized = img
+
+                # Save as JPEG for better compression
+                resized.save(output, format="JPEG", quality=quality, optimize=True)
+                result = output.getvalue()
+
+                if len(result) <= max_size:
+                    log.debug(
+                        f"Resized image: {len(data)} -> {len(result)} bytes "
+                        f"(scale={scale:.2f}, quality={quality})"
+                    )
+                    return result, "jpg"
+
+                # Reduce quality first, then scale
+                if quality > 50:
+                    quality -= 10
+                elif scale > 0.3:
+                    scale -= 0.1
+                    quality = 85  # Reset quality when scaling down
+                else:
+                    # Give up and return what we have
+                    log.warning(f"Could not reduce image below {len(result)} bytes")
+                    return result, "jpg"
+
+        except Exception as e:
+            log.error(f"Failed to resize image: {e}")
+            return data, "png"
+
+    async def _get_image_files(
+        self, guild_id: int, image_ids: list[str]
+    ) -> list[discord.File]:
+        """Fetch image binary data and return as discord.File objects.
+
+        The Outline API requires auth to access images, so we fetch the binary
+        data directly and pass it to Discord as file attachments.
+        Images are resized if they exceed Discord's 8MB limit.
+        """
+        files = []
+        base_url = await self.config.guild_from_id(guild_id).wiki_url()
+        api_key = (await self.bot.get_shared_api_tokens("outline")).get("api_key")
+        if not api_key or not base_url:
+            return files
+
+        for i, img_id in enumerate(image_ids[:2]):  # Only first 2 images
+            url = f"{base_url}/api/attachments.redirect"
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            }
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        url,
+                        headers=headers,
+                        json={"id": img_id},
+                        timeout=aiohttp.ClientTimeout(total=15),
+                        allow_redirects=True,
+                    ) as resp:
+                        if resp.status == 200:
+                            # Read binary data
+                            data = await resp.read()
+
+                            # Resize if needed to fit Discord limits
+                            resized_data, ext = self._resize_image_for_discord(data)
+
+                            filename = f"image{i}.{ext}"
+                            files.append(discord.File(io.BytesIO(resized_data), filename=filename))
+                            log.debug(f"Fetched image {img_id} as {filename} ({len(resized_data)} bytes)")
+                        else:
+                            log.warning(f"Failed to get image {img_id}: status {resp.status}")
+            except Exception as e:
+                log.error(f"Failed to fetch image {img_id}: {e}")
+
+        return files
+
     # --- Content Processing ---
 
     def _extract_image_ids(self, text: str) -> list[str]:
-        """Extract attachment UUIDs from Outline markdown images."""
-        # Pattern: ![...](attachments/UUID.ext ...) or ![](attachments/UUID.ext "...")
-        pattern = r"!\[[^\]]*\]\(attachments/([a-f0-9-]+)(?:\.[^)\s\"]+)?[^)]*\)"
-        return re.findall(pattern, text)
+        """Extract attachment UUIDs from Outline markdown images.
+
+        Outline uses two formats for images:
+        1. /api/attachments.redirect?id=UUID (in rendered content)
+        2. attachments/UUID.ext (in raw markdown)
+        """
+        ids = []
+
+        # Pattern 1: /api/attachments.redirect?id=UUID
+        pattern1 = r"!\[[^\]]*\]\(/api/attachments\.redirect\?id=([a-f0-9-]+)[^)]*\)"
+        matches1 = re.findall(pattern1, text)
+        ids.extend(matches1)
+
+        # Pattern 2: attachments/UUID.ext
+        pattern2 = r"!\[[^\]]*\]\(attachments/([a-f0-9-]+)(?:\.[^)\s\"]+)?[^)]*\)"
+        matches2 = re.findall(pattern2, text)
+        ids.extend(matches2)
+
+        log.debug(f"Image extraction: pattern1 found {len(matches1)}, pattern2 found {len(matches2)}")
+
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_ids = []
+        for id in ids:
+            if id not in seen:
+                seen.add(id)
+                unique_ids.append(id)
+
+        log.debug(f"Extracted {len(unique_ids)} unique image IDs: {unique_ids[:5]}")
+        return unique_ids
 
     def _fix_quote_blocks(self, text: str) -> str:
         """Fix quote blocks for Discord.
@@ -294,7 +440,15 @@ class Lore(commands.Cog):
         # 7. NOW convert literal \n sequences to actual newlines
         text = text.replace("\\n", "\n")
 
-        # 8. Clean up whitespace
+        # 8. Strip callout boxes (:::info, :::warning, etc. through :::)
+        # These have no Discord equivalent
+        text = re.sub(r"^:::.*$", "", text, flags=re.MULTILINE)
+
+        # 9. Downgrade headers above ### to ### (Discord only renders up to ###)
+        # #### -> ###, ##### -> ###, ###### -> ###
+        text = re.sub(r"^#{4,}\s+", "### ", text, flags=re.MULTILINE)
+
+        # 10. Clean up whitespace
         text = re.sub(r"\n{3,}", "\n\n", text)  # Max 2 consecutive newlines
         text = re.sub(r"^\s*---\s*$", "", text, flags=re.MULTILINE)  # Remove horizontal rules
         text = re.sub(r"^\\\s*$", "", text, flags=re.MULTILINE)  # Remove backslash lines
@@ -363,7 +517,7 @@ class Lore(commands.Cog):
         collection: dict | None,
         content: str,
         base_url: str,
-        image_ids: list[str],
+        image_files: list[discord.File],
         author_footer: str | None,
     ) -> discord.Embed:
         """Build the main document embed."""
@@ -395,12 +549,12 @@ class Lore(commands.Cog):
             color=color,
         )
 
-        # Add images (only if document has images)
-        if len(image_ids) == 1:
-            embed.set_image(url=f"{base_url}/api/attachments.redirect?id={image_ids[0]}")
-        elif len(image_ids) >= 2:
-            embed.set_thumbnail(url=f"{base_url}/api/attachments.redirect?id={image_ids[0]}")
-            embed.set_image(url=f"{base_url}/api/attachments.redirect?id={image_ids[1]}")
+        # Add images using attachment:// references to uploaded files
+        # First image -> main embed image, second image -> thumbnail
+        if len(image_files) >= 1:
+            embed.set_image(url=f"attachment://{image_files[0].filename}")
+        if len(image_files) >= 2:
+            embed.set_thumbnail(url=f"attachment://{image_files[1].filename}")
 
         # Add author footer
         if author_footer:
@@ -457,8 +611,8 @@ class Lore(commands.Cog):
 
     async def _build_lore_response(
         self, guild_id: int, query: str
-    ) -> tuple[str | None, list[discord.Embed], LoreView | None]:
-        """Build the complete lore response (content, embeds, view)."""
+    ) -> tuple[str | None, list[discord.Embed], LoreView | None, list[discord.File]]:
+        """Build the complete lore response (content, embeds, view, files)."""
         base_url = await self.config.guild_from_id(guild_id).wiki_url()
         custom_prompt = await self.config.guild_from_id(guild_id).prompt()
         prompt = custom_prompt or DEFAULT_PROMPT
@@ -492,7 +646,7 @@ class Lore(commands.Cog):
                 )
             )
 
-            return content, [embed], view
+            return content, [embed], view, []
 
         # Get primary document from first result
         primary_result = results[0]
@@ -512,6 +666,7 @@ class Lore(commands.Cog):
         backlinks = []
         collection = None
         author_names = []
+        image_files = []
 
         if document_id:
             backlinks = await self._get_backlinks(guild_id, document_id, limit=5)
@@ -521,6 +676,10 @@ class Lore(commands.Cog):
 
         if collaborator_ids:
             author_names = await self._get_collaborator_names(guild_id, collaborator_ids)
+
+        # Fetch image files as binary data
+        if image_ids:
+            image_files = await self._get_image_files(guild_id, image_ids)
 
         # Transform and truncate content
         content = self._transform_outline_markdown(raw_content, base_url)
@@ -537,7 +696,7 @@ class Lore(commands.Cog):
 
         # Build embeds
         main_embed = self._build_main_embed(
-            document, collection, content, base_url, image_ids, author_footer
+            document, collection, content, base_url, image_files, author_footer
         )
         secondary_embed = self._build_secondary_embed(backlinks, other_results, base_url)
 
@@ -559,7 +718,7 @@ class Lore(commands.Cog):
             collection_url=collection_url,
         )
 
-        return flavor_text, embeds, view
+        return flavor_text, embeds, view, image_files
 
     # --- Commands ---
 
@@ -590,8 +749,8 @@ class Lore(commands.Cog):
         await ctx.defer()
 
         try:
-            content, embeds, view = await self._build_lore_response(ctx.guild.id, query)
-            message = await ctx.send(content=content, embeds=embeds, view=view)
+            content, embeds, view, files = await self._build_lore_response(ctx.guild.id, query)
+            message = await ctx.send(content=content, embeds=embeds, view=view, files=files)
             if hasattr(view, "set_message"):
                 view.set_message(message)
         except Exception as e:
