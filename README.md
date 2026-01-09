@@ -61,6 +61,7 @@ Current cogs and their commands. `[p]` is your bot prefix, `/` slash commands in
 A simple roller that transforms into a customizable NPC when you add an OpenAI API key.
 * `/augury` make an appeal to the gods
 * `[p]augur` to change settings
+
 ## dice
 Forked from [PCXCogs](https://github.com/PhasecoreX/PCXCogs). I added better formatting and commands useful for RPG players, including contested rolls.
 * `/roll` roll complicated [dice formulas](https://github.com/StarlitGhost/pyhedrals)
@@ -71,6 +72,13 @@ Forked from [PCXCogs](https://github.com/PhasecoreX/PCXCogs). I added better for
 * `/flipcoin` flip a coin, get heads or tails
 * `/eightball` ask the Magic 8 Ball
 * `[p]diceset` to change settings
+
+## dragonchess (threes)
+The dice game threes. Tracks stats per player and a leaderboard.
+* `/threes play <@challenge>` start a game with an optional challenge, otherwise it's open to first comer
+* `/threes leaderboard` server rankings
+* `/threes stats <@mention>` see player stats, defaults to self with no mention
+* `[p]dc` settings, reset rankings, set timeout, debug game state
 
 ## ghostsync
 Tools for linking [Ghost](https://ghost.org) members to Discord accounts, syncing subscription status to a Discord role, and syncing Discord roles to Ghost labels. This allows you to reward Ghost subscribers with Discord roles, or segment your Ghost newsletters by Discord roles. Requires setting a Ghost Integration Admin API key & secret.

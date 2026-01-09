@@ -1,0 +1,12 @@
+{
+    "name": "Dragonchess",
+    "author": ["DM Brad"],
+    "short": "Play the dice game Threes (aka Dragonchess)",
+    "description": "A two-player dice game where players roll 5 dice, keeping at least one per roll, aiming for the lowest score. 3s count as zero. Rolling 6-6-6-6-6 is an instant win (Shooting the Moon).",
+    "install_msg": "Thanks for installing Dragonchess! Use `[p]dragonchess` or `[p]dc` to start a game.",
+    "requirements": ["pyhedrals"],
+    "tags": ["game", "dice", "gambling", "d6", "threes"],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [3, 11, 0],
+    "end_user_data_statement": "This cog stores win/loss statistics per user within each guild."
+}
