@@ -80,7 +80,7 @@ class ContestedRollButton(Button):
         await interaction.response.send_modal(modal)
 
 class ContestedRollView(View):
-    def __init__(self, challenger, challenged, ctx, dice_roller, initial_result, total, timeout):
+    def __init__(self, challenger, challenged, ctx, dice_roller, initial_result, total, timeout: float = None):
         super().__init__(timeout=timeout)
         self.message = None
         self.challenged = challenged
@@ -96,10 +96,10 @@ class ContestedRollView(View):
             try:
                 await self.message.edit(
                     content=f"> 😞 *{self.challenged.mention} did not respond to {self.challenger.mention}'s challenge.*",
-                    view = None
+                    view=None
                 )
             except:
-                pass # Message was not found / deleted
+                pass
 
 
 class CoinFlipButton(Button):
@@ -140,7 +140,7 @@ class CoinFlipButton(Button):
 
 
 class CoinFlipView(View):
-    def __init__(self, challenger, challenged, coin_result: str, timeout: float):
+    def __init__(self, challenger, challenged, coin_result: str, timeout: float = None):
         super().__init__(timeout=timeout)
         self.message = None
         self.challenger = challenger

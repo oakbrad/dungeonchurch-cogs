@@ -32,7 +32,7 @@ class Dice(commands.Cog):
         "max_die_sides": 10000,
         "randstats_max": 78,
         "randstats_min": 66,
-        "timeout": 86400, # in seconds
+        "timeout": 86400, # in seconds (24 hours)
         "message_cleanup": False
     }
     DROPPED_EXPLODED_RE = re.compile(r"-\*(\d+)\*-")

@@ -378,7 +378,7 @@ class DiceSelectView(ui.View):
 class RematchView(ui.View):
     """View for offering a rematch after a tie."""
 
-    def __init__(self, cog, game: DragonchessGame, guild: discord.Guild, timeout: float = 60):
+    def __init__(self, cog, game: DragonchessGame, guild: discord.Guild, timeout: float = 300):
         super().__init__(timeout=timeout)
         self.cog = cog
         self.game = game

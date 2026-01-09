@@ -26,7 +26,7 @@ class Dragonchess(commands.Cog):
             self, identifier=4206661099, force_registration=True
         )
         default_guild = {
-            "timeout": 300,  # 5 minutes for open challenges
+            "timeout": 86400,  # 24 hours for open challenges
             "stats": {}  # {user_id: {"wins": int, "losses": int, "moon_shots": int}}
         }
         self.config.register_guild(**default_guild)
