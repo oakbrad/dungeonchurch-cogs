@@ -29,7 +29,7 @@ class RefreshButton(Button):
     """Button to refresh the lore search."""
 
     def __init__(self, cog: "Lore", query: str, guild_id: int):
-        super().__init__(label="Refresh", style=discord.ButtonStyle.primary, emoji="🔮")
+        super().__init__(label="Refresh", style=discord.ButtonStyle.secondary, emoji="🔄")
         self.cog = cog
         self.query = query
         self.guild_id = guild_id
@@ -59,7 +59,7 @@ class RefreshButton(Button):
 
 
 class LoreView(View):
-    """View containing Refresh, Edit, and Collection buttons."""
+    """View containing Edit, Collection, and Refresh buttons."""
 
     def __init__(
         self,
@@ -74,21 +74,18 @@ class LoreView(View):
         super().__init__(timeout=timeout)
         self.message = None
 
-        # Refresh button
-        self.add_item(RefreshButton(cog, query, guild_id))
-
-        # Edit button (link to document)
+        # Edit button (link to document) - first
         if document_url:
             self.add_item(
                 Button(
-                    label="Edit",
+                    label="View or Edit",
                     style=discord.ButtonStyle.link,
                     url=document_url,
                     emoji="📝",
                 )
             )
 
-        # Collection button (link to collection page)
+        # Collection button (link to collection page) - second
         if collection_url and collection_name:
             self.add_item(
                 Button(
@@ -98,6 +95,9 @@ class LoreView(View):
                     emoji="📚",
                 )
             )
+
+        # Refresh button - last
+        self.add_item(RefreshButton(cog, query, guild_id))
 
     def set_message(self, message: discord.Message):
         self.message = message
