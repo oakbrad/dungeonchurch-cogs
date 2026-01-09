@@ -200,7 +200,7 @@ class Lore(commands.Cog):
         Outline API returns quote blocks where multi-paragraph content is
         embedded with literal \\n\\n inside the > line. We need to:
         1. Find these embedded paragraphs and give each its own > prefix
-        2. Remove empty > lines that Discord renders poorly
+        2. Add "> " (with space) between paragraphs for visual breaks
 
         This runs BEFORE \\n -> newline conversion.
         """
@@ -211,8 +211,8 @@ class Lore(commands.Cog):
             stripped = line.strip()
 
             if stripped == ">":
-                # Empty quote line - skip it
-                continue
+                # Empty quote line - convert to "> " with space for proper rendering
+                result.append("> ")
             elif stripped.startswith("> \\n") or stripped == "> \\n":
                 # Quote line that starts with literal \n - clean it up
                 # "> \n*text*" -> "> *text*"
@@ -227,10 +227,14 @@ class Lore(commands.Cog):
 
                 if "\\n\\n" in content:
                     # Split on paragraph breaks and give each its own >
+                    # Add "> " between paragraphs for visual separation
                     paragraphs = content.split("\\n\\n")
-                    for p in paragraphs:
+                    for i, p in enumerate(paragraphs):
                         p = p.strip()
                         if p:
+                            if i > 0:
+                                # Add empty quote line before subsequent paragraphs
+                                result.append("> ")
                             result.append(f"> {p}")
                 elif content:
                     result.append(f"> {content}")
