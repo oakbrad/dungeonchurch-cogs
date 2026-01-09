@@ -139,52 +139,6 @@ class Dragonchess(commands.Cog):
         embed = embeds.leaderboard_embed(stats, interaction.guild, game_name="Threes")
         await interaction.response.send_message(embed=embed)
 
-    # -------------------------------------------------------------------------
-    # Prefix Commands (Help/Admin)
-    # -------------------------------------------------------------------------
-
-    @commands.command(name="dragonchess", aliases=["dc"])
-    async def dragonchess_help(self, ctx: commands.Context) -> None:
-        """Show Dragonchess help."""
-        embed = discord.Embed(
-            title="🎲 Dragonchess",
-            description="A dice game where the lowest score wins!\n\n**Use these slash commands:**",
-            color=0x9b59b6
-        )
-        embed.add_field(
-            name="Commands",
-            value=(
-                "`/dragonchess play` - Start a game\n"
-                "`/dragonchess stats` - View your stats\n"
-                "`/dragonchess leaderboard` - View the leaderboard\n"
-                "`/dragonchess rules` - View the rules"
-            ),
-            inline=False
-        )
-        embed.set_footer(text="Admins: Use !dragonchessset for settings")
-        await ctx.send(embed=embed)
-
-    @commands.command(name="threes")
-    async def threes_help(self, ctx: commands.Context) -> None:
-        """Show Threes help."""
-        embed = discord.Embed(
-            title="🎲 Threes",
-            description="A dice game where the lowest score wins!\n\n**Use these slash commands:**",
-            color=0x9b59b6
-        )
-        embed.add_field(
-            name="Commands",
-            value=(
-                "`/threes play` - Start a game\n"
-                "`/threes stats` - View your stats\n"
-                "`/threes leaderboard` - View the leaderboard\n"
-                "`/threes rules` - View the rules"
-            ),
-            inline=False
-        )
-        embed.set_footer(text="Admins: Use !dragonchessset for settings")
-        await ctx.send(embed=embed)
-
     async def _start_game(self, ctx: commands.Context, opponent: discord.Member | None, game_name: str = "Dragonchess") -> None:
         """Internal method to start a game."""
         challenger = ctx.author
@@ -274,13 +228,13 @@ class Dragonchess(commands.Cog):
     # Admin Commands
     # -------------------------------------------------------------------------
 
-    @commands.group()
+    @commands.group(aliases=["dragonchess"])
     @checks.admin_or_permissions(manage_guild=True)
-    async def dragonchessset(self, ctx: commands.Context) -> None:
+    async def dc(self, ctx: commands.Context) -> None:
         """Manage Dragonchess settings."""
 
-    @dragonchessset.command(name="settings")
-    async def dragonchessset_settings(self, ctx: commands.Context) -> None:
+    @dc.command(name="settings")
+    async def dc_settings(self, ctx: commands.Context) -> None:
         """Show current Dragonchess settings."""
         timeout = await self.config.guild(ctx.guild).timeout()
         stats = await self.config.guild(ctx.guild).stats()
@@ -294,8 +248,8 @@ class Dragonchess(commands.Cog):
 
         await ctx.send(embed=embed)
 
-    @dragonchessset.command(name="timeout")
-    async def dragonchessset_timeout(self, ctx: commands.Context, seconds: int) -> None:
+    @dc.command(name="timeout")
+    async def dc_timeout(self, ctx: commands.Context, seconds: int) -> None:
         """Set the timeout for open challenges.
 
         Must be between 30 and 900 seconds (15 minutes).
@@ -307,8 +261,8 @@ class Dragonchess(commands.Cog):
         await self.config.guild(ctx.guild).timeout.set(seconds)
         await ctx.send(success(f"Challenge timeout set to `{seconds}` seconds."))
 
-    @dragonchessset.command(name="reset")
-    async def dragonchessset_reset(self, ctx: commands.Context, member: discord.Member) -> None:
+    @dc.command(name="reset")
+    async def dc_reset(self, ctx: commands.Context, member: discord.Member) -> None:
         """Reset a player's Dragonchess stats."""
         async with self.config.guild(ctx.guild).stats() as stats:
             user_id = str(member.id)
@@ -318,16 +272,16 @@ class Dragonchess(commands.Cog):
             else:
                 await ctx.send(error(f"{member.display_name} has no recorded stats."))
 
-    @dragonchessset.command(name="resetall")
+    @dc.command(name="resetall")
     @checks.is_owner()
-    async def dragonchessset_resetall(self, ctx: commands.Context) -> None:
+    async def dc_resetall(self, ctx: commands.Context) -> None:
         """Reset all Dragonchess stats for this server."""
         await self.config.guild(ctx.guild).stats.set({})
         await ctx.send(success("All Dragonchess stats have been reset."))
 
-    @dragonchessset.command(name="debug")
+    @dc.command(name="debug")
     @checks.is_owner()
-    async def dragonchessset_debug(self, ctx: commands.Context) -> None:
+    async def dc_debug(self, ctx: commands.Context) -> None:
         """Show active games for debugging."""
         if not self.active_games:
             await ctx.send("No active games.")
