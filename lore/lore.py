@@ -1,6 +1,7 @@
 import io
 import re
 import logging
+from datetime import datetime
 import aiohttp
 import discord
 from PIL import Image
@@ -188,13 +189,32 @@ class Lore(commands.Cog):
             return data.get("data")
         return None
 
-    async def _get_collaborator_names(self, guild_id: int, collaborator_ids: list) -> list[str]:
-        """Fetch user names for collaborator IDs via users.info API."""
+    async def _get_collaborator_names(
+        self, guild_id: int, collaborator_ids: list, creator_id: str | None = None
+    ) -> list[str]:
+        """Fetch user names for collaborator IDs via users.info API.
+
+        Returns names with creator first (if provided), then other collaborators.
+        """
         names = []
-        for user_id in collaborator_ids[:5]:  # Limit to 5 collaborators
+        seen_ids = set()
+
+        # Fetch creator first if provided
+        if creator_id:
+            seen_ids.add(creator_id)
+            data = await self._outline_request(guild_id, "users.info", {"id": creator_id})
+            if data and data.get("data"):
+                names.append(data["data"].get("name", "Unknown"))
+
+        # Then fetch other collaborators (excluding creator)
+        for user_id in collaborator_ids[:5]:
+            if user_id in seen_ids:
+                continue
+            seen_ids.add(user_id)
             data = await self._outline_request(guild_id, "users.info", {"id": user_id})
             if data and data.get("data"):
                 names.append(data["data"].get("name", "Unknown"))
+
         return names
 
     def _resize_image_for_discord(self, data: bytes, max_size: int = 8_000_000) -> tuple[bytes, str]:
@@ -519,6 +539,7 @@ class Lore(commands.Cog):
         base_url: str,
         image_files: list[discord.File],
         author_footer: str | None,
+        updated_at: datetime | None,
     ) -> discord.Embed:
         """Build the main document embed."""
         # Parse collection color (hex string like "#ff0000" -> int)
@@ -547,6 +568,7 @@ class Lore(commands.Cog):
             url=doc_url,
             description=content,
             color=color,
+            timestamp=updated_at,
         )
 
         # Add images using attachment:// references to uploaded files
@@ -658,6 +680,16 @@ class Lore(commands.Cog):
         collection_id = document.get("collectionId")
         raw_content = document.get("text", "")
         collaborator_ids = document.get("collaboratorIds", [])
+        creator_id = document.get("createdBy", {}).get("id")
+        updated_at_str = document.get("updatedAt")
+
+        # Parse updatedAt timestamp (ISO 8601 format)
+        updated_at = None
+        if updated_at_str:
+            try:
+                updated_at = datetime.fromisoformat(updated_at_str.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                pass
 
         # Extract image IDs before transforming markdown
         image_ids = self._extract_image_ids(raw_content)
@@ -674,8 +706,10 @@ class Lore(commands.Cog):
         if collection_id:
             collection = await self._get_collection_info(guild_id, collection_id)
 
-        if collaborator_ids:
-            author_names = await self._get_collaborator_names(guild_id, collaborator_ids)
+        # Get collaborator names with creator first
+        author_names = await self._get_collaborator_names(
+            guild_id, collaborator_ids, creator_id
+        )
 
         # Fetch image files as binary data
         if image_ids:
@@ -696,7 +730,7 @@ class Lore(commands.Cog):
 
         # Build embeds
         main_embed = self._build_main_embed(
-            document, collection, content, base_url, image_files, author_footer
+            document, collection, content, base_url, image_files, author_footer, updated_at
         )
         secondary_embed = self._build_secondary_embed(backlinks, other_results, base_url)
 
