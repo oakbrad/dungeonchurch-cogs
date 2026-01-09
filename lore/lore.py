@@ -587,45 +587,69 @@ class Lore(commands.Cog):
     def _build_secondary_embed(
         self, backlinks: list, search_results: list, base_url: str
     ) -> discord.Embed | None:
-        """Build the secondary embed with backlinks and other results."""
+        """Build the secondary embed with two columns of links.
+
+        Layout logic:
+        - Each column can have up to 5 links
+        - Column 1: Backlinks (prioritized)
+        - Column 2: If backlinks > 5, overflow goes here; otherwise deduplicated search results
+        """
         # Get backlink document IDs for deduplication
         backlink_ids = {doc.get("id") for doc in backlinks}
 
-        # Filter search results to exclude backlinks and the primary document
+        # Filter search results to exclude backlinks
         unique_results = [
             r
             for r in search_results
             if r.get("document", {}).get("id") not in backlink_ids
         ]
 
-        fields = []
+        # Build list of backlink entries
+        backlink_entries = []
+        for doc in backlinks[:10]:  # Up to 10 backlinks (2 columns worth)
+            title = doc.get("title", "Untitled")
+            url = f"{base_url}{doc.get('url', '')}"
+            backlink_entries.append(f"[{title}](<{url}>)")
 
-        # Backlinks section (prioritized)
-        if backlinks:
-            backlink_lines = []
-            for doc in backlinks[:5]:
-                title = doc.get("title", "Untitled")
-                url = f"{base_url}{doc.get('url', '')}"
-                backlink_lines.append(f"- [{title}](<{url}>)")
-            fields.append(("🔗 Backlinks", "\n".join(backlink_lines)))
+        # Build list of search result entries
+        search_entries = []
+        for r in unique_results[:5]:
+            doc = r.get("document", {})
+            title = doc.get("title", "Untitled")
+            url = f"{base_url}{doc.get('url', '')}"
+            search_entries.append(f"[{title}](<{url}>)")
 
-        # Other search results section (only show if few backlinks)
-        if unique_results and len(backlinks) < 3:
-            result_lines = []
-            for r in unique_results[:4]:
-                doc = r.get("document", {})
-                title = doc.get("title", "Untitled")
-                url = f"{base_url}{doc.get('url', '')}"
-                result_lines.append(f"- [{title}](<{url}>)")
-            if result_lines:
-                fields.append(("🔎 Search Results", "\n".join(result_lines)))
-
-        if not fields:
+        # Nothing to show
+        if not backlink_entries and not search_entries:
             return None
 
         embed = discord.Embed(color=0x999999)
-        for name, value in fields:
-            embed.add_field(name=name, value=value, inline=True)
+
+        # Column 1: First 5 backlinks
+        col1_entries = backlink_entries[:5]
+        if col1_entries:
+            embed.add_field(
+                name="🔗 Backlinks",
+                value="\n".join(col1_entries),
+                inline=True,
+            )
+
+        # Column 2: Overflow backlinks OR search results
+        if len(backlink_entries) > 5:
+            # Backlinks overflow into column 2
+            col2_entries = backlink_entries[5:10]
+            embed.add_field(
+                name="🔗 More Backlinks",
+                value="\n".join(col2_entries),
+                inline=True,
+            )
+        elif search_entries:
+            # No overflow, show search results
+            embed.add_field(
+                name="🔎 Search Results",
+                value="\n".join(search_entries),
+                inline=True,
+            )
 
         return embed
 
