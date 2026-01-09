@@ -194,6 +194,51 @@ class Lore(commands.Cog):
         pattern = r"!\[[^\]]*\]\(attachments/([a-f0-9-]+)(?:\.[^)\s\"]+)?[^)]*\)"
         return re.findall(pattern, text)
 
+    def _fix_quote_blocks(self, text: str) -> str:
+        """Fix quote blocks for Discord.
+
+        Outline API returns quote blocks where multi-paragraph content is
+        embedded with literal \\n\\n inside the > line. We need to:
+        1. Find these embedded paragraphs and give each its own > prefix
+        2. Remove empty > lines that Discord renders poorly
+
+        This runs BEFORE \\n -> newline conversion.
+        """
+        lines = text.split("\n")
+        result = []
+
+        for line in lines:
+            stripped = line.strip()
+
+            if stripped == ">":
+                # Empty quote line - skip it
+                continue
+            elif stripped.startswith("> \\n") or stripped == "> \\n":
+                # Quote line that starts with literal \n - clean it up
+                # "> \n*text*" -> "> *text*"
+                content = stripped[1:].lstrip()  # Remove > and whitespace
+                if content.startswith("\\n"):
+                    content = content[2:].lstrip()  # Remove \n
+                if content:
+                    result.append(f"> {content}")
+            elif stripped.startswith(">"):
+                # Quote line - check for embedded \n\n paragraphs
+                content = stripped[1:].lstrip()  # Remove > and leading space
+
+                if "\\n\\n" in content:
+                    # Split on paragraph breaks and give each its own >
+                    paragraphs = content.split("\\n\\n")
+                    for p in paragraphs:
+                        p = p.strip()
+                        if p:
+                            result.append(f"> {p}")
+                elif content:
+                    result.append(f"> {content}")
+            else:
+                result.append(line)
+
+        return "\n".join(result)
+
     def _transform_outline_markdown(self, text: str, base_url: str) -> str:
         """Transform Outline markdown to Discord-compatible markdown."""
         # 1a. Convert document mentions to clickable links
@@ -229,7 +274,23 @@ class Lore(commands.Cog):
             text,
         )
 
-        # 5. Clean up whitespace
+        # 5. Simplify redundant URL links: [https://example.com](https://example.com) -> <https://example.com>
+        # Wrap in < > to suppress Discord's auto-embed preview
+        text = re.sub(
+            r"\[(https?://[^\]]+)\]\(\1\)",
+            r"<\1>",
+            text,
+        )
+
+        # 6. Fix quote blocks BEFORE converting \n
+        # Outline embeds multi-paragraph quotes with \n\n inside the > line
+        # We need to ensure each paragraph within a quote gets the > prefix
+        text = self._fix_quote_blocks(text)
+
+        # 7. NOW convert literal \n sequences to actual newlines
+        text = text.replace("\\n", "\n")
+
+        # 8. Clean up whitespace
         text = re.sub(r"\n{3,}", "\n\n", text)  # Max 2 consecutive newlines
         text = re.sub(r"^\s*---\s*$", "", text, flags=re.MULTILINE)  # Remove horizontal rules
         text = re.sub(r"^\\\s*$", "", text, flags=re.MULTILINE)  # Remove backslash lines
