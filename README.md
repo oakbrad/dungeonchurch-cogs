@@ -108,12 +108,12 @@ Tools for linking [Ghost](https://ghost.org) members to Discord accounts, syncin
 * `[p]ghostsync subscribers` list linked subscribers & their subscripßtion tier name
 * `[p]ghostsync orphans` list Discord members not linked to Ghost
 * `[p]ghostsync sync` force a syncß
-ß
+
 ## lore
 Search and use an [Outline](https://getoutline.com) wiki in the chat.
 
-* `/lore <query>` searches and returns the entire article's content
-* `/lore search <query>` returns the first 5 search results with buttons to load those articlesß
+* `/lore wiki <query>` searches and returns the first article's content
+* `/lore search <query>` returns the first 5 search results with buttons to load those articles
 * `/lore link <query>` searches and returns just a link (and with optional AI key, a one sentence summary)
 * `[p]loreconfig` set base URL & prompts
 

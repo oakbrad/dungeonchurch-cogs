@@ -1091,11 +1091,16 @@ Summary:"""
 
     # --- Commands ---
 
-    @commands.hybrid_group(invoke_without_command=True)
-    async def lore(self, ctx: commands.Context, *, query: str) -> None:
-        """Search the lore wiki for a topic.
+    @commands.hybrid_group()
+    async def lore(self, ctx: commands.Context) -> None:
+        """Search and browse the lore wiki."""
+        pass
 
-        Example: /lore dragons
+    @lore.command(name="wiki")
+    async def lore_wiki(self, ctx: commands.Context, *, query: str) -> None:
+        """Search the wiki and post the full article.
+
+        Example: /lore wiki dragons
         """
         # Check for wiki URL configuration
         wiki_url = await self.config.guild(ctx.guild).wiki_url()
