@@ -59,6 +59,153 @@ class RefreshButton(Button):
             )
 
 
+class SearchResultButton(Button):
+    """Numbered button for search results that loads the full document."""
+
+    def __init__(self, cog: "Lore", guild_id: int, document_id: str, index: int):
+        # Number emojis for positions 1-5
+        number_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
+        super().__init__(
+            style=discord.ButtonStyle.secondary,
+            emoji=number_emojis[index],
+        )
+        self.cog = cog
+        self.guild_id = guild_id
+        self.document_id = document_id
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        try:
+            # Fetch the document by ID
+            data = await self.cog._outline_request(
+                self.guild_id, "documents.info", {"id": self.document_id}
+            )
+
+            if not data or not data.get("data"):
+                await interaction.followup.send(
+                    error("Failed to load document."), ephemeral=True
+                )
+                return
+
+            document = data["data"]
+            base_url = await self.cog.config.guild_from_id(self.guild_id).wiki_url()
+
+            # Build the full lore response for this document
+            collection_id = document.get("collectionId")
+            document_id = document.get("id")
+            raw_content = document.get("text", "")
+            collaborator_ids = document.get("collaboratorIds", [])
+            creator_id = document.get("createdBy", {}).get("id")
+            updated_at_str = document.get("updatedAt")
+
+            # Parse updatedAt timestamp
+            updated_at = None
+            if updated_at_str:
+                try:
+                    updated_at = datetime.fromisoformat(updated_at_str.replace("Z", "+00:00"))
+                except (ValueError, TypeError):
+                    pass
+
+            # Extract image IDs
+            image_ids = self.cog._extract_image_ids(raw_content)
+
+            # Fetch additional data
+            backlinks = await self.cog._get_backlinks(self.guild_id, document_id, limit=5)
+            collection = None
+            if collection_id:
+                collection = await self.cog._get_collection_info(self.guild_id, collection_id)
+
+            author_names = await self.cog._get_collaborator_names(
+                self.guild_id, collaborator_ids, creator_id
+            )
+
+            image_files = []
+            if image_ids:
+                image_files = await self.cog._get_image_files(self.guild_id, image_ids)
+
+            # Transform and truncate content
+            content = self.cog._transform_outline_markdown(raw_content, base_url)
+            content = self.cog._truncate_content(content)
+
+            # Generate AI flavor text
+            flavor_text = None
+            custom_prompt = await self.cog.config.guild_from_id(self.guild_id).prompt()
+            prompt = custom_prompt or DEFAULT_PROMPT
+            oracle_text = await self.cog._get_oracle_text(document.get("title", ""), prompt)
+            if oracle_text:
+                flavor_text = f'*"{oracle_text}"*'
+
+            # Build author footer
+            author_footer = self.cog._format_author_footer(author_names)
+
+            # Build embeds - no search results for this view
+            main_embed = self.cog._build_main_embed(
+                document, collection, content, base_url, image_files, author_footer, updated_at
+            )
+            secondary_embed = self.cog._build_secondary_embed(backlinks, [], base_url)
+
+            embeds = [main_embed]
+            if secondary_embed:
+                embeds.append(secondary_embed)
+
+            # Build view
+            doc_url = f"{base_url}{document.get('url', '')}"
+            collection_url = f"{base_url}{collection.get('url', '')}" if collection else None
+            collection_name = collection.get("name") if collection else None
+
+            view = LoreView(
+                cog=self.cog,
+                query=document.get("title", ""),
+                guild_id=self.guild_id,
+                document_url=doc_url,
+                collection_name=collection_name,
+                collection_url=collection_url,
+            )
+
+            # Delete old message and send new one
+            old_message = self.view.message
+            new_message = await interaction.followup.send(
+                content=flavor_text, embeds=embeds, view=view, files=image_files
+            )
+            view.set_message(new_message)
+            if old_message:
+                try:
+                    await old_message.delete()
+                except discord.NotFound:
+                    pass
+
+        except Exception as e:
+            log.error(f"Search result button failed: {e}")
+            await interaction.followup.send(
+                error("Failed to load document."), ephemeral=True
+            )
+
+
+class SearchResultsView(View):
+    """View with numbered buttons for search results."""
+
+    def __init__(self, cog: "Lore", guild_id: int, results: list, timeout: float = 300):
+        super().__init__(timeout=timeout)
+        self.message = None
+
+        # Add numbered buttons for up to 5 results
+        for i, result in enumerate(results[:5]):
+            document = result.get("document", {})
+            doc_id = document.get("id")
+            if doc_id:
+                self.add_item(SearchResultButton(cog, guild_id, doc_id, i))
+
+    def set_message(self, message: discord.Message):
+        self.message = message
+
+    async def on_timeout(self):
+        if self.message:
+            try:
+                await self.message.edit(view=None)
+            except discord.NotFound:
+                pass
+
+
 class LoreView(View):
     """View containing Edit, Collection, and Refresh buttons."""
 
@@ -1050,6 +1197,89 @@ Summary:"""
 
         except Exception as e:
             log.error(f"Lorelink command failed: {e}")
+            await ctx.send(error(f"Failed to search lore: {e}"), ephemeral=True)
+
+    @lore.command(name="search")
+    async def lore_search(self, ctx: commands.Context, *, query: str) -> None:
+        """Search for lore articles and get a list of results.
+
+        Returns up to 5 search results with numbered buttons. Click a number
+        to view the full article.
+
+        Example: /lore search dragons
+        """
+        # Check for wiki URL configuration
+        wiki_url = await self.config.guild(ctx.guild).wiki_url()
+        if not wiki_url:
+            await ctx.send(
+                error("Wiki URL not configured. Use `[p]loreconfig url <url>` first."),
+                ephemeral=True,
+            )
+            return
+
+        # Check for API key
+        outline_key = (await self.bot.get_shared_api_tokens("outline")).get("api_key")
+        if not outline_key:
+            await ctx.send(
+                error("Outline API key not configured. Use `[p]set api outline api_key,<key>`"),
+                ephemeral=True,
+            )
+            return
+
+        await ctx.defer()
+
+        try:
+            # Search for documents (up to 5)
+            results = await self._search_documents(ctx.guild.id, query, limit=5)
+
+            if not results:
+                # No results found
+                await ctx.send(
+                    embed=discord.Embed(
+                        title="Nothing is written...",
+                        description=f"No lore found for **{query}**.\n\nTry a different search term, or create new lore!",
+                        color=0xFF2600,
+                    )
+                )
+                return
+
+            # Build search results embed with ordered list
+            result_lines = []
+            for i, result in enumerate(results[:5]):
+                document = result.get("document", {})
+                title = document.get("title", "Untitled")
+                url = f"{wiki_url}{document.get('url', '')}"
+
+                # Fetch collection name for this document
+                collection_id = document.get("collectionId")
+                collection_name = None
+                if collection_id:
+                    collection = await self._get_collection_info(ctx.guild.id, collection_id)
+                    if collection:
+                        collection_name = collection.get("name")
+
+                # Format: "1. [Title](url) (Collection)"
+                if collection_name:
+                    result_lines.append(f"{i + 1}. [{title}](<{url}>) ({collection_name})")
+                else:
+                    result_lines.append(f"{i + 1}. [{title}](<{url}>)")
+
+            description = "\n".join(result_lines)
+
+            embed = discord.Embed(
+                title=f"🔎 Search Results for '{query}'",
+                description=description,
+                color=0xFF2600,
+            )
+            embed.set_footer(text="Click the link to open in wiki, or click button below to place in chat")
+
+            # Create view with numbered buttons
+            view = SearchResultsView(self, ctx.guild.id, results)
+            message = await ctx.send(embed=embed, view=view)
+            view.set_message(message)
+
+        except Exception as e:
+            log.error(f"Lore search command failed: {e}")
             await ctx.send(error(f"Failed to search lore: {e}"), ephemeral=True)
 
     # --- Configuration Commands ---
