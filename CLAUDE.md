@@ -156,7 +156,7 @@ Common keys used: `openai`, `googlesheets`
 ```python
 embed = discord.Embed(
     title=":emoji: Cog Settings",
-    color=0xff0000
+    color=0xff2600
 )
 for setting, value in settings_dict.items():
     embed.add_field(name=setting, value=f"```{value}```", inline=False)
@@ -185,6 +185,7 @@ async def before_update_task(self):
 
 ### Discord UI Components
 
+**Basic View with Timeout:**
 ```python
 from discord.ui import Button, View
 
@@ -194,9 +195,71 @@ class MyView(View):
         self.message = None
         self.add_item(Button(label="Click", style=discord.ButtonStyle.primary))
 
+    def set_message(self, message: discord.Message):
+        """Store message reference for later editing."""
+        self.message = message
+
     async def on_timeout(self):
+        """Handle view timeout."""
         if self.message:
-            await self.message.edit(view=None)
+            try:
+                await self.message.edit(content="This interaction has expired.", view=None)
+            except (discord.NotFound, discord.HTTPException):
+                pass  # Message was deleted
+```
+
+**Managing View Timeouts:**
+- Use `timeout=None` for views that should never expire (e.g., ongoing games)
+- Use configurable timeouts for challenges/interactions that should expire
+- Default timeout recommendation: 86400 seconds (24 hours) for challenges
+- Always handle `on_timeout()` to clean up expired views
+- Call `view.stop()` when the interaction is complete to prevent timeout handlers
+
+**Pattern: Configurable Timeouts**
+```python
+# In cog config
+default_guild = {
+    "timeout": 86400,  # 24 hours default
+}
+
+# In view initialization
+timeout = await self.config.guild(ctx.guild).timeout()
+view = MyView(challenger, challenged, timeout=timeout)
+
+# In view class
+class MyView(View):
+    def __init__(self, challenger, challenged, timeout: float = None):
+        super().__init__(timeout=timeout)  # None = no timeout
+        # ...
+```
+
+**Linking Views to Messages:**
+```python
+# After sending message with view
+view = MyView()
+sent_message = await ctx.send("Choose an option:", view=view)
+view.set_message(sent_message)  # Store for later editing
+
+# In button callback
+await self.view.message.edit(content="Updated!", view=None)
+```
+
+**Restricting Button Access:**
+```python
+class RestrictedButton(Button):
+    def __init__(self, allowed_user_id: int):
+        super().__init__(label="Click Me", style=discord.ButtonStyle.primary)
+        self.allowed_user_id = allowed_user_id
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.allowed_user_id:
+            await interaction.response.send_message(
+                "This button is not for you!",
+                ephemeral=True
+            )
+            return
+        # Handle allowed user interaction
+        await interaction.response.send_message("Success!")
 ```
 
 ### HTTP Requests
