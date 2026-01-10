@@ -201,7 +201,14 @@ class SearchResultsView(View):
     async def on_timeout(self):
         if self.message:
             try:
-                await self.message.edit(view=None)
+                # Remove the footer from the embed
+                embeds = self.message.embeds
+                if embeds:
+                    embed = embeds[0]
+                    embed.set_footer(text=None)
+                    await self.message.edit(embed=embed, view=None)
+                else:
+                    await self.message.edit(view=None)
             except discord.NotFound:
                 pass
 
