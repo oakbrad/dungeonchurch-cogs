@@ -84,7 +84,7 @@ The dice game threes, aka dragonchess if you play in [Pyora](https://github.com/
 ## ghostsync
 Tools for linking [Ghost](https://ghost.org) members to Discord accounts, syncing subscription status to a Discord role, and syncing Discord roles to Ghost labels. This allows you to reward Ghost subscribers with Discord roles, or segment your Ghost newsletters by Discord roles. Requires setting a Ghost Integration Admin API key & secret.
 
-> *Privacy Note:* this cog stores the user's numeric Discord ID in the Ghost Member Profile, under the private "Note". This is visible to any Ghost staff that can see the Member list.
+> **Privacy Note:** this cog stores the user's numeric Discord ID in the Ghost Member Profile, under the private "Note". This is visible to any Ghost staff that can see the Member list.
 
 **Configuration**
 * `[p]ghostsync url` base API URL
@@ -105,15 +105,17 @@ Tools for linking [Ghost](https://ghost.org) members to Discord accounts, syncin
 * `[p]ghostsync link <email> <@mention>` link a member email to a Discord user (stores ID in Member Note)
 * `[p]ghostsync unlink <email OR @mention>` unlink a user (removes ID from Member Note)
 * `[p]ghostsync members` list all linked members
-* `[p]ghostsync subscribers` list linked subscribers & their subscription tier name
+* `[p]ghostsync subscribers` list linked subscribers & their subscripßtion tier name
 * `[p]ghostsync orphans` list Discord members not linked to Ghost
-* `[p]ghostsync sync` force a sync
-
+* `[p]ghostsync sync` force a syncß
+ß
 ## lore
-Search an [Outline](https://getoutline.com) wiki and return the first article as an embed. Optionally adds AI flavor text with configurable prompt.
+Search and use an [Outline](https://getoutline.com) wiki in the chat.
 
-* `/lore <query>`
-* `.loreconfig` set base URL & prompts
+* `/lore <query>` searches and returns the entire article's content
+* `/lore search <query>` returns the first 5 search results with buttons to load those articlesß
+* `/lore link <query>` searches and returns just a link (and with optional AI key, a one sentence summary)
+* `[p]loreconfig` set base URL & prompts
 
 ## q3stat
 Quake III Arena [server](https://quake.dungeon.church) notifications with [qstat](https://github.com/Unity-Technologies/qstat). Run qstat via crontab on your server to output JSON to a publicly accessible file:
