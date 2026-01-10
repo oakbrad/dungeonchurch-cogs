@@ -498,6 +498,63 @@ class Lore(commands.Cog):
         else:
             return f"Authors: {', '.join(names[:-1])}, and {names[-1]}"
 
+    def _prepare_content_for_summary(self, text: str, max_chars: int = 2000) -> str:
+        """Extract headings and initial content from article text for AI summarization.
+
+        Args:
+            text: Raw article text from Outline API
+            max_chars: Maximum characters to include
+
+        Returns:
+            Cleaned plaintext with headings and content excerpt
+        """
+        # Extract all headings (H1-H6)
+        heading_pattern = r'^#+\s+(.+)$'
+        headings = re.findall(heading_pattern, text, re.MULTILINE)
+
+        # Strip markdown formatting
+        # Remove images
+        cleaned = re.sub(r'!\[.*?\]\(.*?\)', '', text)
+        # Remove links but keep text
+        cleaned = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', cleaned)
+        # Remove mentions
+        cleaned = re.sub(r'@\[([^\]]+)\]\([^\)]+\)', r'\1', cleaned)
+        # Remove bold/italic
+        cleaned = re.sub(r'\*\*([^\*]+)\*\*', r'\1', cleaned)
+        cleaned = re.sub(r'\*([^\*]+)\*', r'\1', cleaned)
+        # Remove code blocks
+        cleaned = re.sub(r'```[^`]*```', '', cleaned, flags=re.DOTALL)
+        # Remove inline code
+        cleaned = re.sub(r'`([^`]+)`', r'\1', cleaned)
+        # Remove quote markers
+        cleaned = re.sub(r'^\s*>\s*', '', cleaned, re.MULTILINE)
+        # Remove multiple newlines
+        cleaned = re.sub(r'\n\n+', '\n\n', cleaned)
+        # Remove literal \n
+        cleaned = cleaned.replace('\\n', '\n')
+
+        cleaned = cleaned.strip()
+
+        # Build result: headings first, then content
+        result_parts = []
+
+        if headings:
+            result_parts.append("Article sections: " + ", ".join(headings[:10]))
+
+        # Truncate content to fit within max_chars
+        remaining_chars = max_chars - sum(len(p) for p in result_parts) - 20
+        if remaining_chars > 100 and cleaned:
+            content_excerpt = cleaned[:remaining_chars].strip()
+            # Find last sentence/paragraph break
+            for sep in ['\n\n', '. ', '\n']:
+                last_break = content_excerpt.rfind(sep)
+                if last_break > remaining_chars // 2:
+                    content_excerpt = content_excerpt[:last_break + len(sep)]
+                    break
+            result_parts.append(content_excerpt)
+
+        return "\n\n".join(result_parts)
+
     # --- AI Integration ---
 
     async def _get_oracle_text(self, text: str, prompt: str) -> str | None:
@@ -515,6 +572,58 @@ class Lore(commands.Cog):
             "model": "gpt-4o-mini",
             "max_tokens": 150,
             "messages": [{"role": "user", "content": prompt + text}],
+        }
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, headers=headers, json=payload) as resp:
+                    if resp.status != 200:
+                        log.error(f"OpenAI API error {resp.status}: {await resp.text()}")
+                        return None
+                    data = await resp.json()
+                    return data["choices"][0]["message"]["content"]
+        except Exception as e:
+            log.error(f"OpenAI request failed: {e}")
+            return None
+
+    async def _get_wiki_summary(self, title: str, content: str) -> str | None:
+        """Generate a one-sentence wiki-style summary with neutral tone.
+
+        Args:
+            title: Article title
+            content: Prepared article content (headings + excerpt)
+
+        Returns:
+            One-sentence summary or None if API unavailable
+        """
+        openai_key = (await self.bot.get_shared_api_tokens("openai")).get("api_key")
+        if not openai_key:
+            return None
+
+        url = "https://api.openai.com/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {openai_key}",
+            "Content-Type": "application/json",
+        }
+
+        prompt = f"""Provide a one-sentence summary in a wiki-style neutral tone for the following article.
+
+Title: {title}
+
+{content}
+
+Summary:"""
+
+        payload = {
+            "model": "gpt-4o-mini",
+            "max_tokens": 100,
+            "temperature": 0.3,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            ],
         }
 
         try:
@@ -653,6 +762,61 @@ class Lore(commands.Cog):
 
         return embed
 
+    async def _build_link_embed(
+        self,
+        guild_id: int,
+        query: str,
+        document: dict,
+        collection: dict | None,
+        author_names: list[str],
+        base_url: str,
+    ) -> discord.Embed:
+        """Build a simplified embed with just link, optional summary, and author info.
+
+        Args:
+            guild_id: Discord guild ID
+            query: User's search query
+            document: Document data from Outline API
+            collection: Collection metadata (name, color, url)
+            author_names: List of author names (creator first, then collaborators)
+            base_url: Base URL of the wiki
+
+        Returns:
+            discord.Embed: Simplified embed with title link, optional AI summary, and footer
+        """
+        title = document.get("title", "Untitled")
+        url = f"{base_url}{document.get('url', '')}"
+
+        # Get collection color
+        color = 0xFF2600  # Default red
+        if collection and "color" in collection:
+            try:
+                color = int(collection["color"].replace("#", ""), 16)
+            except (ValueError, AttributeError):
+                pass
+
+        # Create embed with title as hyperlink
+        embed = discord.Embed(
+            title=title,
+            url=url,
+            color=color,
+        )
+
+        # Add wiki-style summary if OpenAI key is available
+        raw_content = document.get("text", "")
+        if raw_content:
+            prepared_content = self._prepare_content_for_summary(raw_content)
+            summary = await self._get_wiki_summary(title, prepared_content)
+            if summary:
+                embed.description = summary
+
+        # Add author footer
+        if author_names:
+            footer_text = self._format_author_footer(author_names)
+            embed.set_footer(text=footer_text)
+
+        return embed
+
     # --- Main Response Builder ---
 
     async def _build_lore_response(
@@ -780,7 +944,7 @@ class Lore(commands.Cog):
 
     # --- Commands ---
 
-    @commands.hybrid_command()
+    @commands.hybrid_group(invoke_without_command=True)
     async def lore(self, ctx: commands.Context, *, query: str) -> None:
         """Search the lore wiki for a topic.
 
@@ -813,6 +977,79 @@ class Lore(commands.Cog):
                 view.set_message(message)
         except Exception as e:
             log.error(f"Lore command failed: {e}")
+            await ctx.send(error(f"Failed to search lore: {e}"), ephemeral=True)
+
+    @lore.command(name="link")
+    async def lore_link(self, ctx: commands.Context, *, query: str) -> None:
+        """Get a quick link and summary for a lore topic.
+
+        Returns a simplified embed with just the article link, optional AI summary,
+        and author information.
+
+        Example: /lore link dragons
+        """
+        # Check for wiki URL configuration
+        wiki_url = await self.config.guild(ctx.guild).wiki_url()
+        if not wiki_url:
+            await ctx.send(
+                error("Wiki URL not configured. Use `[p]loreconfig url <url>` first."),
+                ephemeral=True,
+            )
+            return
+
+        # Check for API key
+        outline_key = (await self.bot.get_shared_api_tokens("outline")).get("api_key")
+        if not outline_key:
+            await ctx.send(
+                error("Outline API key not configured. Use `[p]set api outline api_key,<key>`"),
+                ephemeral=True,
+            )
+            return
+
+        await ctx.defer()
+
+        try:
+            # Search for documents
+            results = await self._search_documents(ctx.guild.id, query, limit=1)
+
+            if not results:
+                # No results found
+                await ctx.send(
+                    embed=discord.Embed(
+                        title="Nothing is written...",
+                        description=f"No lore found for **{query}**.\n\nTry a different search term, or create new lore!",
+                        color=0xFF2600,
+                    )
+                )
+                return
+
+            # Get the top result
+            primary_result = results[0]
+            document = primary_result.get("document", {})
+
+            # Extract data
+            collection_id = document.get("collectionId")
+            collaborator_ids = document.get("collaboratorIds", [])
+            creator_id = document.get("createdBy", {}).get("id")
+
+            # Fetch collection info and author names
+            collection = None
+            if collection_id:
+                collection = await self._get_collection_info(ctx.guild.id, collection_id)
+
+            author_names = await self._get_collaborator_names(
+                ctx.guild.id, collaborator_ids, creator_id
+            )
+
+            # Build simplified embed
+            embed = await self._build_link_embed(
+                ctx.guild.id, query, document, collection, author_names, wiki_url
+            )
+
+            await ctx.send(embed=embed)
+
+        except Exception as e:
+            log.error(f"Lorelink command failed: {e}")
             await ctx.send(error(f"Failed to search lore: {e}"), ephemeral=True)
 
     # --- Configuration Commands ---
