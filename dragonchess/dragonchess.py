@@ -250,6 +250,10 @@ class Dragonchess(commands.Cog):
         if game.is_tie or not game.winner:
             return
 
+        # Check if bot game tracking is enabled
+        if not await self.config.guild(guild).track_bot_games():
+            return
+
         # Only record stats for the human player
         human_id = [p for p in game.players if p != bot_id][0]
 
@@ -280,12 +284,14 @@ class Dragonchess(commands.Cog):
         """Show current Dragonchess settings."""
         timeout = await self.config.guild(ctx.guild).timeout()
         stats = await self.config.guild(ctx.guild).stats()
+        track_bot_games = await self.config.guild(ctx.guild).track_bot_games()
 
         embed = discord.Embed(
             title="Dragonchess Settings",
             color=0x9b59b6
         )
         embed.add_field(name="Challenge Timeout", value=f"`{timeout}` seconds", inline=True)
+        embed.add_field(name="Track Bot Games", value=f"`{track_bot_games}`", inline=True)
         embed.add_field(name="Players Tracked", value=f"`{len(stats)}`", inline=True)
 
         await ctx.send(embed=embed)
@@ -302,6 +308,18 @@ class Dragonchess(commands.Cog):
 
         await self.config.guild(ctx.guild).timeout.set(seconds)
         await ctx.send(success(f"Challenge timeout set to `{seconds}` seconds."))
+
+    @dc.command(name="trackbots")
+    async def dc_trackbots(self, ctx: commands.Context, enabled: bool) -> None:
+        """Enable or disable tracking stats from bot games.
+
+        When enabled, wins/losses against bots count toward player stats.
+        """
+        await self.config.guild(ctx.guild).track_bot_games.set(enabled)
+        if enabled:
+            await ctx.send(success("Bot game stats will now be tracked."))
+        else:
+            await ctx.send(success("Bot game stats will no longer be tracked."))
 
     @dc.command(name="reset")
     async def dc_reset(self, ctx: commands.Context, member: discord.Member) -> None:
