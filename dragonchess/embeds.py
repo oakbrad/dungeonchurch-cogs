@@ -110,7 +110,7 @@ def dice_roll_embed(dice: list[int], player_name: str, show_instructions: bool =
     return embed
 
 
-def winner_embed(game: DragonchessGame, guild: discord.Guild) -> discord.Embed:
+def winner_embed(game: DragonchessGame, guild: discord.Guild, is_bot_game: bool = False) -> discord.Embed:
     """Build the embed announcing the winner."""
     if game.is_tie:
         embed = discord.Embed(
@@ -129,7 +129,8 @@ def winner_embed(game: DragonchessGame, guild: discord.Guild) -> discord.Embed:
             value=f"**{name1}**: `{s1}`\n**{name2}**: `{s1}`",
             inline=False
         )
-        embed.set_footer(text="Rematch offer expires in 5 minutes.")
+        if not is_bot_game:
+            embed.set_footer(text="Rematch offer expires in 5 minutes.")
         return embed
 
     winner_member = guild.get_member(game.winner)

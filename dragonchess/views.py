@@ -458,9 +458,9 @@ class RematchView(ui.View):
         self.handled = True
         self.stop()
 
-        # Start new game with same players
+        # Start new game with same players, preserving game name
         p1, p2 = self.game.players
-        new_game = DragonchessGame(p1, p2)
+        new_game = DragonchessGame(p1, p2, game_name=self.game.game_name)
 
         # Store game state
         self.cog.active_games[self.message.id] = new_game
@@ -626,10 +626,10 @@ class BotGameView(ui.View):
         if not self.message:
             return
 
-        winner_embed = embeds.winner_embed(self.game, self.guild)
+        winner_embed = embeds.winner_embed(self.game, self.guild, is_bot_game=True)
 
         if self.game.is_tie:
-            # For bot games, auto-decline rematch on tie - but show the full tie embed
+            # For bot games, auto-decline rematch on tie - show tie embed without rematch footer
             try:
                 await self.message.edit(embed=winner_embed, view=None)
             except (discord.NotFound, discord.HTTPException):
@@ -696,10 +696,10 @@ class BotGameView(ui.View):
         """Handle game end when triggered by an interaction."""
         self.stop()
 
-        winner_embed = embeds.winner_embed(self.game, self.guild)
+        winner_embed = embeds.winner_embed(self.game, self.guild, is_bot_game=True)
 
         if self.game.is_tie:
-            # Show the full tie embed (winner_embed handles ties too)
+            # Show tie embed without rematch footer for bot games
             await interaction.response.edit_message(embed=winner_embed, view=None)
         else:
             await self.cog.record_bot_game_result(self.guild, self.game, self.bot_id)
@@ -801,13 +801,13 @@ class BotDiceSelectView(ui.View):
 
     async def _handle_game_end(self, interaction: discord.Interaction | None) -> None:
         """Handle game end."""
-        winner_embed = embeds.winner_embed(self.game, self.guild)
+        winner_embed = embeds.winner_embed(self.game, self.guild, is_bot_game=True)
 
         # Record stats only if not a tie
         if not self.game.is_tie:
             await self.cog.record_bot_game_result(self.guild, self.game, self.bot_id)
 
-        # Show the result embed (winner_embed handles ties too)
+        # Show the result embed (winner_embed handles ties too, without rematch footer for bot games)
         if interaction:
             await interaction.response.edit_message(embed=winner_embed, view=None)
         elif self.message:
