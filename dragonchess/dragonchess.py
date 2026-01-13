@@ -169,7 +169,7 @@ class Dragonchess(commands.Cog):
         else:
             # Open challenge
             timeout = await self.config.guild(ctx.guild).timeout()
-            challenge_embed = embeds.open_challenge_embed(challenger, game_name=game_name)
+            challenge_embed = embeds.open_challenge_embed(challenger, game_name=game_name, timeout=timeout)
             challenge_view = OpenChallengeView(self, challenger, timeout, game_name=game_name)
 
             sent = await ctx.send(embed=challenge_embed, view=challenge_view)

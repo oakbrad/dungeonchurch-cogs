@@ -6,6 +6,24 @@ Functions for creating Discord embeds for the game.
 import discord
 from .game import DragonchessGame
 
+
+def format_timeout(seconds: int) -> str:
+    """Format a timeout in seconds to a human-readable string."""
+    if seconds >= 86400:
+        hours = seconds // 3600
+        if hours >= 24:
+            days = hours // 24
+            return f"{days} day" if days == 1 else f"{days} days"
+        return f"{hours} hours"
+    elif seconds >= 3600:
+        hours = seconds // 3600
+        return f"{hours} hour" if hours == 1 else f"{hours} hours"
+    elif seconds >= 60:
+        minutes = seconds // 60
+        return f"{minutes} minute" if minutes == 1 else f"{minutes} minutes"
+    else:
+        return f"{seconds} seconds"
+
 # Number emojis matching the buttons
 NUMBER_EMOJIS = {
     1: "1️⃣",
@@ -109,6 +127,7 @@ def winner_embed(game: DragonchessGame, guild: discord.Guild) -> discord.Embed:
             value=f"**{name1}**: `{s1}`\n**{name2}**: `{s1}`",
             inline=False
         )
+        embed.set_footer(text="Rematch offer expires in 5 minutes.")
         return embed
 
     winner_member = guild.get_member(game.winner)
@@ -146,14 +165,18 @@ def winner_embed(game: DragonchessGame, guild: discord.Guild) -> discord.Embed:
     return embed
 
 
-def open_challenge_embed(challenger: discord.Member, game_name: str = "Dragonchess") -> discord.Embed:
+def open_challenge_embed(challenger: discord.Member, game_name: str = "Dragonchess", timeout: int = None) -> discord.Embed:
     """Build the embed for an open challenge."""
     embed = discord.Embed(
         title=f"{game_name} Challenge!",
         description=f"**{challenger.display_name}** is looking for an opponent!\n\nClick **Accept** to play.",
         color=0x9b59b6
     )
-    embed.set_footer(text="First to accept becomes the opponent.")
+    if timeout:
+        footer_text = f"First to accept becomes the opponent. Expires in {format_timeout(timeout)}."
+    else:
+        footer_text = "First to accept becomes the opponent."
+    embed.set_footer(text=footer_text)
     return embed
 
 

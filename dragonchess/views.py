@@ -66,10 +66,17 @@ class OpenChallengeView(ui.View):
         # Update message with game state
         status_embed = embeds.game_status_embed(game, interaction.guild)
         await interaction.response.defer()
-        await self.message.edit(
-            embed=status_embed,
-            view=game_view
-        )
+        try:
+            await self.message.edit(
+                embed=status_embed,
+                view=game_view
+            )
+        except (discord.NotFound, discord.HTTPException):
+            await interaction.followup.send(
+                "This challenge is no longer available.",
+                ephemeral=True
+            )
+            return
 
         # Prompt first player to roll
         notification = await interaction.followup.send(
@@ -302,13 +309,20 @@ class DiceSelectView(ui.View):
             )
         else:
             # Auto-confirm case - edit message directly
-            await self.message.edit(
-                embed=status_embed,
-                view=game_view
-            )
-            notification = await self.message.channel.send(
-                f"{next_name}, it's your turn! Click **Roll Dice**."
-            )
+            if not self.message:
+                return  # Message reference lost, game is abandoned
+            try:
+                await self.message.edit(
+                    embed=status_embed,
+                    view=game_view
+                )
+                notification = await self.message.channel.send(
+                    f"{next_name}, it's your turn! Click **Roll Dice**."
+                )
+                game_view.set_turn_notification(notification)
+            except (discord.NotFound, discord.HTTPException):
+                pass  # Message was deleted, game is abandoned
+            return
         game_view.set_turn_notification(notification)
 
     @ui.button(label="Confirm", style=discord.ButtonStyle.primary, emoji="✅", row=1)
@@ -349,11 +363,14 @@ class DiceSelectView(ui.View):
                     embed=winner_embed,
                     view=rematch_view
                 )
-            else:
-                await self.message.edit(
-                    embed=winner_embed,
-                    view=rematch_view
-                )
+            elif self.message:
+                try:
+                    await self.message.edit(
+                        embed=winner_embed,
+                        view=rematch_view
+                    )
+                except (discord.NotFound, discord.HTTPException):
+                    pass  # Message was deleted
         else:
             # Record stats and show winner
             await self.cog.record_game_result(self.guild, self.game)
@@ -364,11 +381,14 @@ class DiceSelectView(ui.View):
                     embed=winner_embed,
                     view=None
                 )
-            else:
-                await self.message.edit(
-                    embed=winner_embed,
-                    view=None
-                )
+            elif self.message:
+                try:
+                    await self.message.edit(
+                        embed=winner_embed,
+                        view=None
+                    )
+                except (discord.NotFound, discord.HTTPException):
+                    pass  # Message was deleted
 
         # Clean up game state
         if self.message and self.message.id in self.cog.active_games:
