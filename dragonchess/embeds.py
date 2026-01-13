@@ -137,30 +137,40 @@ def winner_embed(game: DragonchessGame, guild: discord.Guild) -> discord.Embed:
     winner_name = winner_member.display_name if winner_member else f"Player {game.winner}"
     loser_name = loser_member.display_name if loser_member else f"Player {game.loser}"
 
+    winner_score = game.get_score(game.winner)
+    loser_score = game.get_score(game.loser)
+
     if game.moon_shot:
         embed = discord.Embed(
-            title="Shooting the Moon!",
-            description=f"**{winner_name}** rolled 6-6-6-6-6 and wins instantly!",
+            title=f"🎉 {winner_name} Wins!",
+            description=f"**Shooting the Moon!** Rolled 6-6-6-6-6 for an instant win!",
             color=0xe74c3c  # Red
         )
     else:
-        winner_score = game.get_score(game.winner)
-        loser_score = game.get_score(game.loser)
         embed = discord.Embed(
-            title=f"{winner_name} Wins!",
-            description=f"**{winner_name}**: `{winner_score}` vs **{loser_name}**: `{loser_score}`",
+            title=f"🎉 {winner_name} Wins!",
             color=0x2ecc71  # Green
         )
 
-    # Show final dice
+    # Show final dice with scores
+    winner_stats = getattr(game, 'winner_stats', None)
+    loser_stats = getattr(game, 'loser_stats', None)
+
+    # Format dice value, optionally with W/L record
+    winner_dice = format_dice(game.get_kept_dice(game.winner))
+    loser_dice = format_dice(game.get_kept_dice(game.loser))
+    if winner_stats and loser_stats:
+        winner_dice += f"\n{winner_stats.get('wins', 0)}W / {winner_stats.get('losses', 0)}L"
+        loser_dice += f"\n{loser_stats.get('wins', 0)}W / {loser_stats.get('losses', 0)}L"
+
     embed.add_field(
-        name=f"{winner_name}'s Dice",
-        value=format_dice(game.get_kept_dice(game.winner)),
+        name=f"{winner_name}: `{winner_score}`",
+        value=winner_dice,
         inline=True
     )
     embed.add_field(
-        name=f"{loser_name}'s Dice",
-        value=format_dice(game.get_kept_dice(game.loser)),
+        name=f"{loser_name}: `{loser_score}`",
+        value=loser_dice,
         inline=True
     )
 

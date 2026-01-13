@@ -68,6 +68,10 @@ class Dragonchess(commands.Cog):
                 stats[loser_id] = {"wins": 0, "losses": 0, "moon_shots": 0}
             stats[loser_id]["losses"] += 1
 
+            # Attach stats to game for embed display
+            game.winner_stats = stats[winner_id].copy()
+            game.loser_stats = stats[loser_id].copy()
+
     # -------------------------------------------------------------------------
     # Slash Commands (User-facing) - Dragonchess
     # -------------------------------------------------------------------------
@@ -269,6 +273,10 @@ class Dragonchess(commands.Cog):
                     stats[human_id_str]["moon_shots"] += 1
             else:
                 stats[human_id_str]["losses"] += 1
+
+            # Attach human stats to game for embed display (bot has no stats)
+            game.winner_stats = stats[human_id_str].copy() if game.winner == human_id else None
+            game.loser_stats = stats[human_id_str].copy() if game.loser == human_id else None
 
     # -------------------------------------------------------------------------
     # Admin Commands
