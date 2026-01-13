@@ -67,14 +67,13 @@ class OpenChallengeView(ui.View):
 
         # Update message with game state
         status_embed = embeds.game_status_embed(game, interaction.guild)
-        await interaction.response.defer()
         try:
-            await self.message.edit(
+            await interaction.response.edit_message(
                 embed=status_embed,
                 view=game_view
             )
         except (discord.NotFound, discord.HTTPException):
-            await interaction.followup.send(
+            await interaction.response.send_message(
                 "This challenge is no longer available.",
                 ephemeral=True
             )
@@ -86,6 +85,24 @@ class OpenChallengeView(ui.View):
             wait=True
         )
         game_view.set_turn_notification(notification)
+
+    @ui.button(label="Cancel", style=discord.ButtonStyle.secondary, emoji="❌")
+    async def cancel(self, interaction: discord.Interaction, button: ui.Button) -> None:
+        # Only the challenger can cancel
+        if interaction.user.id != self.challenger.id:
+            await interaction.response.send_message(
+                "Only the challenger can cancel this challenge!",
+                ephemeral=True
+            )
+            return
+
+        self.stop()
+
+        try:
+            await interaction.response.defer()
+            await self.message.delete()
+        except (discord.NotFound, discord.HTTPException):
+            pass
 
 
 class GameView(ui.View):
@@ -554,6 +571,9 @@ class BotGameView(ui.View):
             try:
                 await self.message.edit(embeds=[status_embed, dice_embed], view=None)
             except (discord.NotFound, discord.HTTPException):
+                # Message gone, clean up game state
+                if self.message.id in self.cog.active_games:
+                    del self.cog.active_games[self.message.id]
                 return
 
             # Random delay before keeping dice
@@ -573,6 +593,9 @@ class BotGameView(ui.View):
         try:
             await self.message.edit(embed=status_embed, view=self)
         except (discord.NotFound, discord.HTTPException):
+            # Message gone, clean up game state
+            if self.message.id in self.cog.active_games:
+                del self.cog.active_games[self.message.id]
             return
 
         # Notify human player
@@ -591,6 +614,14 @@ class BotGameView(ui.View):
     async def _handle_game_end(self) -> None:
         """Handle the end of a bot game."""
         self.stop()
+
+        # Clean up turn notification if it exists
+        if self.turn_notification:
+            try:
+                await self.turn_notification.delete()
+            except (discord.NotFound, discord.HTTPException):
+                pass
+            self.turn_notification = None
 
         if not self.message:
             return
