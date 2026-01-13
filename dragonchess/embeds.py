@@ -98,13 +98,15 @@ def game_status_embed(game: DragonchessGame, guild: discord.Guild) -> discord.Em
     return embed
 
 
-def dice_roll_embed(dice: list[int], player_name: str) -> discord.Embed:
+def dice_roll_embed(dice: list[int], player_name: str, show_instructions: bool = True) -> discord.Embed:
     """Build the embed showing the current dice roll."""
     embed = discord.Embed(
         title=f"{player_name}'s Roll",
         description=f"# {format_dice_emojis(dice)}",
         color=0x3498db  # Blue
     )
+    if show_instructions:
+        embed.set_footer(text="Make your choices below.")
     return embed
 
 

@@ -172,3 +172,26 @@ class DragonchessGame:
     def is_player_finished(self, player_id: int) -> bool:
         """Check if a player has finished their turn."""
         return self.player_states[player_id].finished
+
+    def get_bot_keep_indices(self) -> list[int]:
+        """Return indices of dice to keep using optimal strategy.
+
+        Strategy: Keep 3s first (worth 0), then lowest value die.
+        Always keeps at least one die.
+        """
+        current_roll = self.current_state.current_roll
+        if not current_roll:
+            return []
+
+        # Find indices of all 3s (worth 0 points - best to keep)
+        three_indices = [i for i, val in enumerate(current_roll) if val == 3]
+        if three_indices:
+            return three_indices
+
+        # No 3s - keep the single lowest die
+        min_val = min(current_roll)
+        for i, val in enumerate(current_roll):
+            if val == min_val:
+                return [i]
+
+        return [0]  # Fallback - shouldn't reach here

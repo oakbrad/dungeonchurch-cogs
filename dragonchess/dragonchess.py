@@ -10,7 +10,7 @@ from redbot.core.bot import Red
 from redbot.core.utils.chat_formatting import error, success
 
 from .game import DragonchessGame
-from .views import OpenChallengeView, GameView
+from .views import OpenChallengeView, GameView, BotGameView
 from . import embeds
 
 
@@ -27,7 +27,8 @@ class Dragonchess(commands.Cog):
         )
         default_guild = {
             "timeout": 86400,  # 24 hours for open challenges
-            "stats": {}  # {user_id: {"wins": int, "losses": int, "moon_shots": int}}
+            "stats": {},  # {user_id: {"wins": int, "losses": int, "moon_shots": int}}
+            "track_bot_games": False,  # Whether to record stats from bot games
         }
         self.config.register_guild(**default_guild)
 
@@ -146,7 +147,8 @@ class Dragonchess(commands.Cog):
         # Validate opponent
         if opponent:
             if opponent.bot:
-                await ctx.send(error("You can't challenge a bot!"), ephemeral=True)
+                # Start game against bot
+                await self._start_bot_game(ctx, opponent, game_name)
                 return
             if opponent.id == challenger.id:
                 await ctx.send(error("You can't challenge yourself!"), ephemeral=True)
@@ -223,6 +225,46 @@ class Dragonchess(commands.Cog):
             inline=False
         )
         return embed
+
+    async def _start_bot_game(self, ctx: commands.Context, bot_opponent: discord.Member, game_name: str) -> None:
+        """Start a game against a bot opponent."""
+        challenger = ctx.author
+
+        # Human is always player 1 (goes first)
+        game = DragonchessGame(challenger.id, bot_opponent.id, game_name=game_name)
+        status_embed = embeds.game_status_embed(game, ctx.guild)
+        game_view = BotGameView(self, game, ctx.guild, bot_opponent.id)
+
+        sent = await ctx.send(embed=status_embed, view=game_view)
+        game_view.set_message(sent)
+        self.active_games[sent.id] = game
+
+        notification = await ctx.send(
+            f"{challenger.mention} is playing {game_name} against {bot_opponent.mention}!\n"
+            f"{challenger.mention}, click **Roll Dice** to begin."
+        )
+        game_view.set_turn_notification(notification)
+
+    async def record_bot_game_result(self, guild: discord.Guild, game: DragonchessGame, bot_id: int) -> None:
+        """Record the result of a game against a bot (human stats only)."""
+        if game.is_tie or not game.winner:
+            return
+
+        # Only record stats for the human player
+        human_id = [p for p in game.players if p != bot_id][0]
+
+        async with self.config.guild(guild).stats() as stats:
+            human_id_str = str(human_id)
+
+            if human_id_str not in stats:
+                stats[human_id_str] = {"wins": 0, "losses": 0, "moon_shots": 0}
+
+            if game.winner == human_id:
+                stats[human_id_str]["wins"] += 1
+                if game.moon_shot:
+                    stats[human_id_str]["moon_shots"] += 1
+            else:
+                stats[human_id_str]["losses"] += 1
 
     # -------------------------------------------------------------------------
     # Admin Commands
