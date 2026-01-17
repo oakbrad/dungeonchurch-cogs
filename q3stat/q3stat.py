@@ -291,22 +291,28 @@ class Q3stat(commands.Cog):
         players = current_state.get("players", [])
         if players:
             sorted_players = sorted(players, key=lambda p: p.get("score", 0), reverse=True)
-            score_lines = []
-            player_lines = []
+            
+            # Create a formatted table inside a code block
+            table_lines = ["```", "Score | Player"]
+            table_lines.append("-" * 30)  # Separator line
+            
             for player in sorted_players:
                 score = player.get("score", 0)
                 name = player.get("name", "Unknown")
+                
+                # Format the line with proper spacing
                 if player.get("ping", 0) == 0:
-                    # Format bot names in italics
-                    name = f"_{name}_"
+                    # Bot player
+                    table_lines.append(f"{score:5} | {name} (bot)")
                 else:
-                    name = f"👤 **{name}**"
-                    score = f"  **{str(score)}**"
-                score_lines.append(str(score))
-                player_lines.append(f"{name}")
-            embed.add_field(name="Score", value="\n".join(score_lines), inline=True)
-            embed.add_field(name="Name", value="\n".join(player_lines), inline=True)
-            embed.add_field(name="",value="",inline=True)
+                    # Human player
+                    table_lines.append(f"{score:5} | {name}")
+            
+            table_lines.append("```")
+            
+            # Add the formatted table as a single field
+            embed.add_field(name="Player Scoreboard", value="\n".join(table_lines), inline=False)
+            
         return embed
     
     ### UPDATE AN EXISTING SERVER EMBED
